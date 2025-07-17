@@ -1,5 +1,7 @@
 # Chi OpenApi Gen
 
+![ChiOpenApiGen](./banner.png)
+
 An annotation-driven OpenAPI 3.1 specification generator for Go HTTP services using Chi router. This package automatically generates comprehensive API documentation from your Go code with zero configuration required.
 
 **About This Project**: This project was initially part of a larger monolith, where we needed immediate documentation. It was using Chi and sqlc with pgx/v5, therefore, this package would have the best support for that tech stack only. If this fits your usecase, feel free to use it. There are a lot of rooms for improvements, but it serves the purpose necessary for us at this point of time. Contributions are welcome, see the [CONTRIBUTING.md](CONTRIBUTING.md) file. This readme.md is AI generated.
