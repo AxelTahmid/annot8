@@ -28,36 +28,36 @@ all: tidy build
 
 ## tidy: Clean up go.mod and go.sum
 tidy:
-	go mod tidy
+	@go mod tidy
 
 ## install: Download Go module dependencies
 install:
-	go mod download
+	@go mod download
 
 ## test: Run all tests with verbose output
 test:
-	go test -v ./...
+	@go test -v ./...
 
 ## build: Compile the Go project
 build:
-	go build ./...
+	@go build ./...
 
 ## fmt: Format Go code using gofmt
 fmt:
-	gofmt -s -w .
+	@gofmt -s -w .
 
 ## lint: Run golint for code style checks
 lint:
 	@golint ./...
 
-## vet: Run go vet for static analysis
+## vet: Run @go vet for static analysis
 vet:
-	go vet ./...
+	@go vet ./...
 
 ## clean: Remove generated files
 clean:
-	rm -rf annot8.json
+	@rm -rf annot8.json
 
 ## run: Run the Go application
 run:
-	go run .
+	@go run .
