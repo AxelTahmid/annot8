@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	middlewareImportPath = "github.com/platrpos/backend/internal/middleware"
-	aclImportPath        = "github.com/platrpos/backend/pkg/acl"
+	middlewareImportPath = "middleware"
+	aclImportPath        = "acl"
 )
 
 // resolveACLPermissions determines ACL requirements for a handler.
