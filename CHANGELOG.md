@@ -1,5 +1,18 @@
 ## Changelog
 
+## [0.4.0](https://github.com/AxelTahmid/annot8/compare/v0.3.0...v0.4.0) (2026-02-03)
+
+
+### Features
+
+* add banner image to README for enhanced visual appeal ([4c94a4a](https://github.com/AxelTahmid/annot8/commit/4c94a4ae5c554b1d0bc881746a3d7b757dc20fc1))
+* update schema generation tests to use correct package references and add new test types ([bf03267](https://github.com/AxelTahmid/annot8/commit/bf03267c497acac101621c3772e0bc45a57afd17))
+
+
+### Bug Fixes
+
+* update middleware and ACL import paths to use relative references ([2707990](https://github.com/AxelTahmid/annot8/commit/270799076af27242b1e28be85890325b52d519ce))
+
 ## [0.3.0](https://github.com/AxelTahmid/annot8/compare/v0.2.0...v0.3.0) (2025-07-06)
 
 ### Features
