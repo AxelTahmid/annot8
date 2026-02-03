@@ -1,5 +1,5 @@
-// Package openapi provides struct-to-schema conversion logic.
-package openapi
+// Package annot8 provides struct-to-schema conversion logic.
+package annot8
 
 import (
 	"go/ast"
@@ -9,44 +9,14 @@ import (
 
 // convertStructToSchema converts a Go AST struct type into an OpenAPI object schema.
 func (sg *SchemaGenerator) convertStructToSchema(structType *ast.StructType) *Schema {
-	slog.Debug("[openapi] convertStructToSchema: called")
-	schema := &Schema{
-		Type:       "object",
-		Properties: make(map[string]*Schema),
-		Required:   []string{},
-	}
+	slog.Debug("[annot8] convertStructToSchema: called")
+
+	var allOf []*Schema
+	properties := make(map[string]*Schema)
+	var required []string
 
 	for _, field := range structType.Fields.List {
-		if len(field.Names) == 0 {
-			continue // embedded field
-		}
-
-		fieldName := field.Names[0].Name
-		if !ast.IsExported(fieldName) {
-			continue // skip unexported
-		}
-
-		// Determine JSON property name
-		jsonName := fieldName
-		if field.Tag != nil {
-			tag := strings.Trim(field.Tag.Value, "`")
-			if jsonTag := extractJSONTag(tag); jsonTag != "" && jsonTag != "-" {
-				jsonName = jsonTag
-			}
-		}
-
-		// Convert field type
-		fieldSchema := sg.convertFieldType(field.Type)
-
-		// Apply struct tag enhancements
-		if field.Tag != nil {
-			tag := strings.Trim(field.Tag.Value, "`")
-			sg.applyEnhancedTags(fieldSchema, tag)
-		}
-
-		schema.Properties[jsonName] = fieldSchema
-
-		// Ensure dependent schemas generated
+		// Ensure dependent schemas generated for the field type
 		switch t := field.Type.(type) {
 		case *ast.Ident:
 			if t.Obj != nil && t.Obj.Kind == ast.Typ {
@@ -65,19 +35,73 @@ func (sg *SchemaGenerator) convertStructToSchema(structType *ast.StructType) *Sc
 			}
 		}
 
-		// Determine required fields
-		if !isPointerType(field.Type) && !hasOmitEmpty(field.Tag) {
-			schema.Required = append(schema.Required, jsonName)
+		if len(field.Names) == 0 {
+			// Handle embedded field
+			embeddedSchema := sg.convertFieldType(field.Type)
+			allOf = append(allOf, embeddedSchema)
+			continue
+		}
+
+		for _, nameIdent := range field.Names {
+			fieldName := nameIdent.Name
+			if !ast.IsExported(fieldName) {
+				continue // skip unexported
+			}
+
+			// Determine JSON property name
+			jsonName := fieldName
+			if field.Tag != nil {
+				tag := strings.Trim(field.Tag.Value, "`")
+				if jsonTag := extractJSONTag(tag); jsonTag != "" && jsonTag != "-" {
+					jsonName = jsonTag
+				}
+			}
+
+			// Convert field type
+			fieldSchema := sg.convertFieldType(field.Type)
+
+			// Apply struct tag enhancements ONLY if not a reference schema
+			// References should not have sibling properties per OpenAPI 3.1 spec
+			if field.Tag != nil && fieldSchema.Ref == "" {
+				tag := strings.Trim(field.Tag.Value, "`")
+				sg.applyEnhancedTags(fieldSchema, tag)
+			}
+
+			properties[jsonName] = fieldSchema
+
+			// Determine required fields
+			if !isPointerType(field.Type) && !hasOmitEmpty(field.Tag) {
+				required = append(required, jsonName)
+			}
 		}
 	}
 
-	return schema
+	if len(allOf) == 0 {
+		return &Schema{
+			Type:       "object",
+			Properties: properties,
+			Required:   required,
+		}
+	}
+
+	// if we have local properties, add as anonymous object to allOf
+	if len(properties) > 0 {
+		allOf = append(allOf, &Schema{
+			Type:       "object",
+			Properties: properties,
+			Required:   required,
+		})
+	}
+
+	return &Schema{
+		AllOf: allOf,
+	}
 }
 
 // convertFieldType inspects a Go AST expression and returns its OpenAPI schema representation.
 // It handles identifiers, pointers, arrays, selectors, maps, and empty interfaces.
 func (sg *SchemaGenerator) convertFieldType(expr ast.Expr) *Schema {
-	slog.Debug("[openapi] convertFieldType: called")
+	slog.Debug("[annot8] convertFieldType: called")
 
 	switch t := expr.(type) {
 	case *ast.Ident:
@@ -91,8 +115,41 @@ func (sg *SchemaGenerator) convertFieldType(expr ast.Expr) *Schema {
 		return sg.GenerateSchema(qualified)
 
 	case *ast.StarExpr:
-		// Pointer types: underlying schema
-		return sg.convertFieldType(t.X)
+		// Pointer types: check for external types first (like *time.Time)
+		if ident, ok := t.X.(*ast.Ident); ok {
+			qualified := "*" + sg.getQualifiedTypeName(ident.Name)
+			if sg.typeIndex != nil {
+				if schema, ok := sg.typeIndex.externalKnownTypes[qualified]; ok {
+					return schema
+				}
+			}
+		} else if sel, ok := t.X.(*ast.SelectorExpr); ok {
+			if ident, ok := sel.X.(*ast.Ident); ok {
+				qualified := "*" + ident.Name + "." + sel.Sel.Name
+				if sg.typeIndex != nil {
+					if schema, ok := sg.typeIndex.externalKnownTypes[qualified]; ok {
+						return schema
+					}
+				}
+			}
+		}
+
+		// Fallback: Pointer types: wrap with nullability to support OAS 3.1
+		underlying := sg.convertFieldType(t.X)
+		if underlying.Ref != "" {
+			// For references, we use anyOf to avoid type conflicts (e.g. if the ref is a string enum)
+			return &Schema{
+				AnyOf: []*Schema{
+					underlying,
+					{Type: "null"},
+				},
+			}
+		}
+
+		if tStr, ok := underlying.Type.(string); ok {
+			underlying.Type = []string{tStr, "null"}
+		}
+		return underlying
 
 	case *ast.ArrayType:
 		// Arrays and slices
@@ -115,7 +172,7 @@ func (sg *SchemaGenerator) convertFieldType(expr ast.Expr) *Schema {
 		return &Schema{Type: "object"}
 	}
 
-	slog.Debug("[openapi] convertFieldType: unknown type, defaulting to object")
+	slog.Debug("[annot8] convertFieldType: unknown type, defaulting to object")
 	return &Schema{Type: "object"}
 }
 

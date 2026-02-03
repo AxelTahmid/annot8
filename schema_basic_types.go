@@ -1,5 +1,5 @@
-// Package openapi defines helpers for OpenAPI schema generation from Go types.
-package openapi
+// Package annot8 defines helpers for OpenAPI schema generation from Go types.
+package annot8
 
 import (
 	"strings"
@@ -29,8 +29,31 @@ func (sg *SchemaGenerator) generateBasicTypeSchema(typeName string) *Schema {
 		return &Schema{Type: "array", Items: sg.GenerateSchema(elem)}
 	}
 	if strings.HasPrefix(typeName, "*") {
+		// Try to see if the pointer type is known externally first (e.g. *time.Time)
+		qualified := sg.getQualifiedTypeName(typeName)
+		if sg.typeIndex != nil {
+			if schema, ok := sg.typeIndex.externalKnownTypes[qualified]; ok {
+				return schema
+			}
+		}
+
 		clean := strings.TrimPrefix(typeName, "*")
-		return sg.GenerateSchema(clean)
+		// For basic primitives, use the new 3.1 multi-type array
+		if !strings.Contains(clean, ".") && isBasicType(clean) && !strings.HasPrefix(clean, "[]") && !strings.HasPrefix(clean, "map[") {
+			underlying := mapGoTypeToOpenAPI(clean)
+			return &Schema{
+				Type: []string{underlying, "null"},
+			}
+		}
+
+		// For complex types or slices/maps, use anyOf to avoid type conflicts
+		underlying := sg.GenerateSchema(clean)
+		return &Schema{
+			AnyOf: []*Schema{
+				underlying,
+				{Type: "null"},
+			},
+		}
 	}
 	// Fallback to mapping
 	openapiType := mapGoTypeToOpenAPI(typeName)

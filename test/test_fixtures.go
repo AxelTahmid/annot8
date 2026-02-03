@@ -1,0 +1,67 @@
+package annot8
+
+// TestSimple is a helper struct used by annot8 tests to verify schema generation.
+type TestSimple struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+// TestWithPointer exercises pointer field handling in schema generation.
+type TestWithPointer struct {
+	Name *string `json:"name,omitempty"`
+}
+
+// TestWithArray exercises array field handling in schema generation.
+type TestWithArray struct {
+	Tags []string `json:"tags"`
+}
+
+// TestNested verifies nested struct references across generated schemas.
+type TestNested struct {
+	Simple TestSimple `json:"simple"`
+}
+
+// testHelperOther is an auxiliary struct referenced by TestWithQualified.
+type testHelperOther struct {
+	Foo int `json:"foo"`
+}
+
+// TestWithQualified ensures qualified type names are generated for nested structs.
+type TestWithQualified struct {
+	Other testHelperOther `json:"other"`
+}
+
+// TagExample exercises enhanced tag handling when generating schemas.
+type TagExample struct {
+	ID    string `json:"id"              annot8:"format=uuid,deprecated=true,default=00000000-0000-0000-0000-000000000000"`
+	Alias string `json:"alias,omitempty" annot8:"pattern=^a.*$,minLength=2,maxLength=5"`
+	Email string `json:"email"                                                                                              validate:"email"`
+	Owner string `json:"owner,omitempty"                                                                                                     binding:"uuid"`
+}
+
+// MyEnum is a test enum representing string-based constants.
+type MyEnum string
+
+const (
+	MyEnumA MyEnum = "A"
+	MyEnumB MyEnum = "B"
+)
+
+// TestWithEnumField verifies that enum fields in structs are properly referenced
+type TestWithEnumField struct {
+	ID     int    `json:"id"`
+	Name   string `json:"name"`
+	Status MyEnum `json:"status"`
+}
+
+// TestCompliance31 verifies OpenAPI 3.1 specific schema features.
+type TestCompliance31 struct {
+	Count int     `json:"count" annot8:"exclusiveMin=0,exclusiveMax=100"`
+	Rate  float64 `json:"rate"  annot8:"exclusiveMin=0.5"`
+}
+
+// TestAliasMap is a type alias for a map.
+type TestAliasMap map[string]int
+
+// TestAliasSlice is a type alias for a slice.
+type TestAliasSlice []TestSimple

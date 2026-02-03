@@ -1,39 +1,63 @@
-.PHONY: all tidy install test build run clean fmt lint vet
+# Load .env file if it exists (local overrides system)
+ifneq (,$(wildcard ./.env))
+	include .env
+	export
+endif
 
+.PHONY: help
+## help: Display this help message
+help:
+	@echo "Usage:"
+	@echo "  make <target> [variables]"
+	@echo ""
+	@echo "Available targets:"
+	@echo ${MAKEFILE_LIST}
+	@sed -n 's/^##//p' $(MAKEFILE_LIST) | column -t -s ':' |  sed -e 's/^/ /'
+
+# ----------------------------------------------------------------------
+# Development Targets
+# ----------------------------------------------------------------------
+.PHONY: check-env all tidy install test build run clean fmt lint vet
+
+## check-env: Ensure .env exists; if not, copy from .env.example
+check-env:
+	@test -f .env || cp .env.example .env
+
+## all: Run tidy and build targets
 all: tidy build
 
-# Run go mod tidy to clean up dependencies
+## tidy: Clean up go.mod and go.sum
 tidy:
 	go mod tidy
 
-# Install dependencies (go mod download)
+## install: Download Go module dependencies
 install:
 	go mod download
 
-# Run tests
+## test: Run all tests with verbose output
 test:
 	go test -v ./...
 
-# Build the project (no output binary, just check build)
+## build: Compile the Go project
 build:
 	go build ./...
 
-# Run gofmt on all Go files
+## fmt: Format Go code using gofmt
 fmt:
 	gofmt -s -w .
 
-# Run golint (requires golint to be installed)
+## lint: Run golint for code style checks
 lint:
 	@golint ./...
 
-# Run go vet for static analysis
+## vet: Run go vet for static analysis
 vet:
 	go vet ./...
 
-# Clean build artifacts
+## clean: Remove generated files
 clean:
-	rm -rf openapi.json
+	rm -rf annot8.json
 
-# Run the project (customize as needed)
+## run: Run the Go application
 run:
 	go run .

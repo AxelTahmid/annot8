@@ -1,5 +1,5 @@
-// Package openapi provides enum detection and schema generation for string-based Go enums.
-package openapi
+// Package annot8 provides enum detection and schema generation for string-based Go enums.
+package annot8
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 
 // handleEnumType checks if a qualified Go type is a string-based enum and generates a schema with enum values.
 func (sg *SchemaGenerator) handleEnumType(qualifiedName string) *Schema {
-	slog.Debug("[openapi] handleEnumType: checking enum type", "qualifiedName", qualifiedName)
+	slog.Debug("[annot8] handleEnumType: checking enum type", "qualifiedName", qualifiedName)
 	if sg.typeIndex == nil {
 		return nil
 	}
@@ -43,7 +43,7 @@ func (sg *SchemaGenerator) handleEnumType(qualifiedName string) *Schema {
 
 // extractEnumValues finds constant string values for a given type in AST files.
 func (sg *SchemaGenerator) extractEnumValues(packageName, typeName string) []interface{} {
-	slog.Debug("[openapi] extractEnumValues: extracting values", "pkg", packageName, "type", typeName)
+	slog.Debug("[annot8] extractEnumValues: extracting values", "pkg", packageName, "type", typeName)
 	if sg.typeIndex == nil {
 		return nil
 	}

@@ -1,6 +1,4 @@
-package openapi
-
-// ...existing code...
+package annot8_test
 
 import (
 	"encoding/json"
@@ -8,25 +6,22 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
+
+	annot8 "github.com/AxelTahmid/annot8"
 )
 
-// ResetGlobals resets any global state for testing.
-func ResetGlobals() {
-	resetTypeIndexForTesting()
-	ensureTypeIndex()
+// NewTestSchemaGenerator returns a fresh SchemaGenerator backed by a newly built TypeIndex.
+func NewTestSchemaGenerator() *annot8.SchemaGenerator {
+	idx := annot8.BuildTypeIndex()
+	return annot8.NewSchemaGenerator(idx)
 }
 
-// NewTestSchemaGenerator resets globals and returns a SchemaGenerator.
-func NewTestSchemaGenerator() *SchemaGenerator {
-	ResetGlobals()
-	return NewSchemaGenerator()
-}
-
-// NewTestGenerator resets globals and returns a Generator.
-func NewTestGenerator() *Generator {
-	ResetGlobals()
-	return NewGenerator()
+// NewTestGenerator returns a Generator configured with the shared TypeIndex.
+func NewTestGenerator() *annot8.Generator {
+	idx := annot8.BuildTypeIndex()
+	return annot8.NewGeneratorWithCache(idx)
 }
 
 // AssertEqual fails the test if expected != actual.
@@ -74,4 +69,26 @@ func Request(handler http.Handler, method, path string, body io.Reader) *httptes
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	return rec
+}
+
+// FindSchemaBySuffix returns the schema whose key ends with suffix or fails the test if not found.
+func FindSchemaBySuffix(t *testing.T, schemas map[string]annot8.Schema, suffix string) annot8.Schema {
+	t.Helper()
+	for name, schema := range schemas {
+		if strings.HasSuffix(name, suffix) || name == strings.TrimPrefix(suffix, ".") {
+			return schema
+		}
+	}
+	t.Fatalf("expected schema ending with %s, got %v", suffix, schemas)
+	return annot8.Schema{}
+}
+
+// HasSchemaWithSuffix reports whether schemas contains a key ending with suffix (or exact match).
+func HasSchemaWithSuffix(schemas map[string]annot8.Schema, suffix string) bool {
+	for name := range schemas {
+		if strings.HasSuffix(name, suffix) || name == strings.TrimPrefix(suffix, ".") {
+			return true
+		}
+	}
+	return false
 }

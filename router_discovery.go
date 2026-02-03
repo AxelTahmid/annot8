@@ -1,4 +1,4 @@
-package openapi
+package annot8
 
 import (
 	"fmt"
@@ -45,26 +45,29 @@ func InspectRoutes(r chi.Router) ([]RouteInfo, error) {
 	}
 
 	var routes []RouteInfo
-	err := chi.Walk(r, func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
-		// Attempt to extract http.HandlerFunc
-		var hf http.HandlerFunc
-		switch h := handler.(type) {
-		case http.HandlerFunc:
-			hf = h
-		default:
-			// wrap other handlers
-			hf = h.ServeHTTP
-		}
-		name := runtime.FuncForPC(reflect.ValueOf(hf).Pointer()).Name()
-		routes = append(routes, RouteInfo{
-			Method:      method,
-			Pattern:     route,
-			HandlerName: name,
-			HandlerFunc: hf,
-			Middlewares: middlewares,
-		})
-		return nil
-	})
+	err := chi.Walk(
+		r,
+		func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
+			// Attempt to extract http.HandlerFunc
+			var hf http.HandlerFunc
+			switch h := handler.(type) {
+			case http.HandlerFunc:
+				hf = h
+			default:
+				// wrap other handlers
+				hf = h.ServeHTTP
+			}
+			name := runtime.FuncForPC(reflect.ValueOf(hf).Pointer()).Name()
+			routes = append(routes, RouteInfo{
+				Method:      method,
+				Pattern:     route,
+				HandlerName: name,
+				HandlerFunc: hf,
+				Middlewares: middlewares,
+			})
+			return nil
+		},
+	)
 
 	if err != nil {
 		return nil, &RouteDiscoveryError{
@@ -78,7 +81,7 @@ func InspectRoutes(r chi.Router) ([]RouteInfo, error) {
 
 // DiscoverRoutes returns only non-internal routes for OpenAPI spec assembly.
 // This function filters out routes that are part of the OpenAPI tooling itself
-// (such as /swagger and /openapi endpoints) to avoid circular references in the specification.
+// (such as /swagger and /annot8 endpoints) to avoid circular references in the specification.
 func DiscoverRoutes(r chi.Router) ([]RouteInfo, error) {
 	// Retrieve all routes via InspectRoutes
 	infos, err := InspectRoutes(r)
@@ -87,8 +90,8 @@ func DiscoverRoutes(r chi.Router) ([]RouteInfo, error) {
 	}
 	var filtered []RouteInfo
 	for _, ri := range infos {
-		// Skip OpenAPI internals
-		if strings.Contains(ri.Pattern, "/swagger") || strings.Contains(ri.Pattern, "/openapi") {
+		// Skip documentation/internal routes (swagger, annot8, annot8)
+		if strings.Contains(ri.Pattern, "/swagger") || strings.Contains(ri.Pattern, "/annot8") || strings.Contains(ri.Pattern, "/annot8") {
 			continue
 		}
 		filtered = append(filtered, ri)

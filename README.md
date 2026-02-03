@@ -1,45 +1,45 @@
-# Chi OpenApi Gen
+# Annot8
 
-![ChiOpenApiGen](./banner.png)
+![Annot8](./banner.png)
 
-An annotation-driven OpenAPI 3.1 specification generator for Go HTTP services using Chi router. This package automatically generates comprehensive API documentation from your Go code with zero configuration required.
+Annot8 is an annotation-driven OpenAPI 3.1 specification generator for Go HTTP services using the Chi router. It automatically generates comprehensive API documentation from your Go code with minimal configuration.
 
-**About This Project**: This project was initially part of a larger monolith, where we needed immediate documentation. It was using Chi and sqlc with pgx/v5, therefore, this package would have the best support for that tech stack only. If this fits your usecase, feel free to use it. There are a lot of rooms for improvements, but it serves the purpose necessary for us at this point of time. Contributions are welcome, see the [CONTRIBUTING.md](CONTRIBUTING.md) file. This readme.md is AI generated.
+**About This Project**: Annot8 was extracted from a larger application with 340+ models and is focused on generating OpenAPI 3.1 documentation from Go code - particularly sqlc-generated types. It was developed and tested primarily with the Chi router together with `sqlc` and `pgx/v5`, so you'll get the best results on that stack, though it can be used elsewhere. The project favors pragmatic, working output over exhaustive edge-case coverage; contributions, bug reports and improvements are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-[![Go Version](https://img.shields.io/badge/go-%3E%3D1.24-blue.svg)](https://golang.org/)
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.25-blue.svg)](https://golang.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/AxelTahmid/openapi-gen)](https://goreportcard.com/report/github.com/AxelTahmid/openapi-gen)
+[![Go Report Card](https://goreportcard.com/badge/github.com/AxelTahmid/annot8)](https://goreportcard.com/report/github.com/AxelTahmid/annot8)
 
 ## Features
 
--   **Zero Configuration**: No manual type registration or complex setup required
--   **Chi Router Native**: Specifically designed and optimized for `go-chi/chi` router
--   **Annotation-Driven**: Uses standard Swagger-style comments for documentation
--   **Dynamic Schema Generation**: Automatically generates JSON schemas from Go types
--   **High Performance**: Built-in caching and type indexing for optimal performance
--   **Type Safety**: Leverages Go's type system for accurate schema generation
--   **Deep Type Discovery**: Recursively finds and documents all referenced types
--   **External Type Support**: Configurable support for third-party library types
--   **Runtime Generation**: Updates documentation dynamically without restarts
+- **Zero Configuration**: No manual type registration or complex setup required
+- **Chi Router Native**: Specifically designed and optimized for `go-chi/chi` router
+- **Annotation-Driven**: Uses standard Swagger-style comments for documentation
+- **Dynamic Schema Generation**: Automatically generates JSON schemas from Go types
+- **Performance**: Type indexing and caching of handler resolution for faster generation
+- **Type Safety**: Leverages Go's type system for accurate schema generation
+- **Deep Type Discovery**: Recursively finds and documents all referenced types
+- **External Type Support**: Configurable support for third-party library types
+- **Runtime Generation**: Updates documentation dynamically without restarts
 
 ## Current Limitations
 
 As mentioned, this package was extracted from a larger project and has room for improvements:
 
--   **Chi Router Only**: Currently only supports `go-chi/chi` router (by design)
--   **Top-Level Functions**: Handlers must be top-level functions, not struct methods
--   **SQLC/pgx Optimized**: Best performance with SQLC-generated types and pgx/v5
--   **AST Parsing Limitations**: Complex comment patterns may not be parsed correctly
--   **Limited Router Support**: No plans to support other routers (Gin, Echo, etc.)
--   **Type Discovery**: May struggle with deeply nested or complex generic types
--   **Documentation**: Some edge cases in annotation parsing may need manual workarounds
+- **Chi Router Only**: Currently only supports `go-chi/chi` router (by design)
+- **Handler Support**: Supports both top-level functions and receiver methods (struct methods); handler discovery resolves methods via runtime inspection and source parsing when necessary.
+- **SQLC/pgx Optimized**: Best performance with SQLC-generated types and pgx/v5
+- **AST Parsing Limitations**: Complex comment patterns may not be parsed correctly
+- **Limited Router Support**: No plans to support other routers (Gin, Echo, etc.)
+- **Type Discovery**: May struggle with deeply nested or complex generic types
+- **Documentation**: Some edge cases in annotation parsing may need manual workarounds
 
 Despite these limitations, the package serves its core purpose effectively for Chi + SQLC + pgx/v5 projects.
 
 ## Installation
 
 ```bash
-go get github.com/AxelTahmid/openapi-gen
+go get github.com/AxelTahmid/annot8
 ```
 
 ## Quick Start
@@ -76,7 +76,7 @@ type UserListResponse struct {
 
 ### 2. Create Annotated Handler Functions
 
-**Important**: Handlers must be **top-level functions**, not struct methods, for annotation parsing to work correctly.
+**Note**: Handlers may be either **top-level functions** or **receiver methods**; documentation is discovered from the handler function (or its receiver method) comments.
 
 ```go
 // GetUsers retrieves a paginated list of users
@@ -145,12 +145,13 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 package main
 
 import (
+    "encoding/json"
     "log"
     "net/http"
 
     "github.com/go-chi/chi/v5"
     "github.com/go-chi/chi/v5/middleware"
-    "github.com/AxelTahmid/openapi-gen"
+    "github.com/AxelTahmid/annot8"
 )
 
 func main() {
@@ -160,30 +161,36 @@ func main() {
     r.Use(middleware.Logger)
     r.Use(middleware.Recoverer)
 
-    // Configure OpenAPI
-    config := openapi.Config{
-        Title:          "User Management API",
-        Description:    "A comprehensive API for managing users",
-        Version:        "1.0.0",
+    config := annot8.Config{
+        Title:       "User Management API",
+        Description: "A comprehensive API for managing users",
+        Version:     "1.0.0",
         TermsOfService: "https://example.com/terms",
-        Server:         "https://api.example.com",
-        Contact: &openapi.Contact{
+        Servers:     []string{"https://api.example.com"},
+        Contact: &annot8.Contact{
             Name:  "API Support Team",
             Email: "api-support@example.com",
             URL:   "https://example.com/support",
         },
-        License: &openapi.License{
+        License: &annot8.License{
             Name: "Apache 2.0",
             URL:  "https://www.apache.org/licenses/LICENSE-2.0.html",
         },
     }
 
-    // Add OpenAPI endpoints (typically only in development)
-    r.Route("/openapi", func(r chi.Router) {
-        r.Get("/", openapi.CachedHandler(r, config))
-        r.Get("/generate", openapi.GenerateFileHandler(r, config))
-        r.Get("/invalidate", openapi.InvalidateCache)
+    // Serve the OpenAPI JSON dynamically by generating the spec on demand.
+    r.Get("/annot8.json", func(w http.ResponseWriter, req *http.Request) {
+        gen := annot8.NewGenerator()
+        spec := gen.GenerateSpec(r, config)
+
+        w.Header().Set("Content-Type", "application/json")
+        enc := json.NewEncoder(w)
+        enc.SetIndent("", "  ")
+        enc.Encode(spec)
     })
+
+    // Serve a documentation UI using the built-in HTML generator.
+    r.Get("/docs", annot8.SwaggerUIHandler("/annot8.json"))
 
     // Add your API routes
     r.Route("/api/v1", func(r chi.Router) {
@@ -195,12 +202,13 @@ func main() {
     })
 
     log.Println("Server starting on :8080")
-    log.Println("OpenAPI spec available at: http://localhost:8080/openapi")
+    log.Println("OpenAPI spec available at: http://localhost:8080/annot8.json")
+    log.Println("API docs available at: http://localhost:8080/docs")
     http.ListenAndServe(":8080", r)
 }
 ```
 
-#### Option B: Standalone CLI Tool for File Generation
+#### Option B: Generate a Static OpenAPI File
 
 ```go
 // cmd/generate-docs/main.go
@@ -208,32 +216,33 @@ package main
 
 import (
     "log"
-    "os"
 
     "github.com/go-chi/chi/v5"
-    "github.com/AxelTahmid/openapi-gen"
+    "github.com/AxelTahmid/annot8"
 )
 
 func main() {
-    // Create router and register routes (same as above)
     r := chi.NewRouter()
-    r.Get("/api/v1/users", GetUsers)
-    r.Post("/api/v1/users", CreateUser)
-    // ... other routes
+    // register your routes here (same as your application)
 
-    config := openapi.Config{
+    cfg := annot8.Config{
         Title:   "User Management API",
         Version: "1.0.0",
-        Server:  "https://api.example.com",
+        Servers: []string{"https://api.example.com"},
     }
 
-    // Generate OpenAPI spec file
-    err := openapi.GenerateOpenAPISpecFile(r, config, "openapi.json", true)
-    if err != nil {
+    params := &annot8.GenerateParams{
+        Router:   r,
+        Config:   cfg,
+        FilePath: "annot8.json",
+        // RenameFunction: optionally customize model naming
+    }
+
+    if err := annot8.GenerateOpenAPISpecFile(params); err != nil {
         log.Fatalf("Failed to generate OpenAPI spec: %v", err)
     }
 
-    log.Println("OpenAPI specification generated successfully: openapi.json")
+    log.Println("OpenAPI specification generated successfully: annot8.json")
 }
 ```
 
@@ -241,16 +250,13 @@ func main() {
 
 ```bash
 # View the OpenAPI specification
-curl http://localhost:8080/openapi | jq .
+curl http://localhost:8080/annot8.json | jq .
 
-# Use with Swagger UI
-docker run -p 8080:8080 -e SWAGGER_JSON_URL=http://host.docker.internal:8080/openapi swaggerapi/swagger-ui
+# Use with Swagger UI (point it at the generated JSON)
+docker run -p 8080:8080 -e SWAGGER_JSON_URL=http://host.docker.internal:8080/annot8.json swaggerapi/swagger-ui
 
-# Generate static file
-curl http://localhost:8080/openapi/generate
-
-# Invalidate cache for fresh generation
-curl http://localhost:8080/openapi/invalidate
+# Or generate a static file using the example CLI
+# go run cmd/generate-docs/main.go
 ```
 
 ## Usage Scenarios
@@ -273,15 +279,22 @@ func main() {
 
     // Add OpenAPI endpoints for development
     if os.Getenv("ENV") != "production" {
-        config := openapi.Config{
+        config := annot8.Config{
             Title:   "My API",
             Version: "1.0.0",
-            Server:  "http://localhost:8080",
+            Servers: []string{"http://localhost:8080"},
         }
 
         r.Route("/docs", func(r chi.Router) {
-            r.Get("/openapi.json", openapi.CachedHandler(r, config))
-            r.Get("/", swaggerUIHandler) // Your Swagger UI handler
+            r.Get("/annot8.json", func(w http.ResponseWriter, req *http.Request) {
+                gen := annot8.NewGenerator()
+                spec := gen.GenerateSpec(r, config)
+                w.Header().Set("Content-Type", "application/json")
+                enc := json.NewEncoder(w)
+                enc.SetIndent("", "  ")
+                enc.Encode(spec)
+            })
+            r.Get("/", annot8.SwaggerUIHandler("/docs/annot8.json"))
         })
     }
 
@@ -300,14 +313,14 @@ package main
 
 import (
     "log"
-    "github.com/AxelTahmid/openapi-gen"
+    "github.com/AxelTahmid/annot8"
 )
 
 func main() {
     // Setup your router with all routes
     r := setupProductionRoutes()
 
-    config := openapi.Config{
+    config := annot8.Config{
         Title:       "Production API",
         Version:     "1.0.0",
         Server:      "https://api.yourdomain.com",
@@ -315,12 +328,12 @@ func main() {
     }
 
     // Generate static file
-    err := openapi.GenerateOpenAPISpecFile(r, config, "docs/openapi.json", true)
+    err := annot8.GenerateOpenAPISpecFile(r, config, "docs/annot8.json", true)
     if err != nil {
         log.Fatalf("Failed to generate spec: %v", err)
     }
 
-    log.Println("Static OpenAPI spec generated at docs/openapi.json")
+    log.Println("Static OpenAPI spec generated at docs/annot8.json")
 }
 ```
 
@@ -347,7 +360,7 @@ jobs:
             - name: Setup Go
               uses: actions/setup-go@v3
               with:
-                  go-version: '1.24'
+                  go-version: '1.25'
 
             - name: Generate OpenAPI spec
               run: |
@@ -355,7 +368,7 @@ jobs:
 
             - name: Validate OpenAPI spec
               run: |
-                  npx @apidevtools/swagger-cli validate docs/openapi.json
+                  npx @apidevtools/swagger-cli validate docs/annot8.json
 
             - name: Deploy to GitHub Pages
               if: github.ref == 'refs/heads/main'
@@ -374,21 +387,17 @@ func TestAPIDocumentation(t *testing.T) {
     // Setup test router
     r := setupTestRoutes()
 
-    config := openapi.Config{
+    config := annot8.Config{
         Title:   "Test API",
         Version: "1.0.0",
     }
 
     // Generate spec
-    handler := openapi.CachedHandler(r, config)
-    req := httptest.NewRequest("GET", "/openapi", nil)
-    w := httptest.NewRecorder()
-    handler(w, req)
+    gen := annot8.NewGenerator()
+    spec := gen.GenerateSpec(r, config)
 
     // Validate spec structure
-    var spec openapi.Spec
-    err := json.Unmarshal(w.Body.Bytes(), &spec)
-    require.NoError(t, err)
+    require.Equal(t, "Test API", spec.Info.Title)
 
     // Test specific endpoints are documented
     assert.Contains(t, spec.Paths, "/api/v1/users")
@@ -434,14 +443,14 @@ func generateServiceDocs() {
     }
 
     for name, router := range services {
-        config := openapi.Config{
+        config := annot8.Config{
             Title:   fmt.Sprintf("%s API", strings.Title(name)),
             Version: "1.0.0",
             Server:  fmt.Sprintf("https://%s.api.company.com", name),
         }
 
-        filename := fmt.Sprintf("docs/%s-openapi.json", name)
-        err := openapi.GenerateOpenAPISpecFile(router, config, filename, true)
+        filename := fmt.Sprintf("docs/%s-annot8.json", name)
+        err := annot8.GenerateOpenAPISpecFile(router, config, filename, true)
         if err != nil {
             log.Printf("Failed to generate %s docs: %v", name, err)
         }
@@ -479,51 +488,50 @@ func main() {
             "admin": "secret", // Basic auth for docs
         }))
 
-        config := openapi.Config{
+        config := annot8.Config{
             Title:   "Protected API",
             Version: "1.0.0",
         }
 
-        r.Get("/openapi.json", openapi.CachedHandler(r, config))
+        // Dynamically generate the spec on demand
+        r.Get("/annot8.json", func(w http.ResponseWriter, req *http.Request) {
+            gen := annot8.NewGenerator()
+            spec := gen.GenerateSpec(r, config)
+            w.Header().Set("Content-Type", "application/json")
+            enc := json.NewEncoder(w)
+            enc.SetIndent("", "  ")
+            enc.Encode(spec)
+        })
+
+        // Optional: serve an HTML docs page
+        r.Get("/", annot8.SwaggerUIHandler("/docs/annot8.json"))
     })
 
     http.ListenAndServe(":8080", r)
 }
 ```
 
-## Why Top-Level Functions?
+## Handler discovery and comments
 
-This package uses Go's AST parsing to extract function comments and annotations. For the parser to correctly identify and process your handler functions, they must be defined as **top-level functions** rather than struct methods.
+The generator discovers documentation from function declarations and their associated doc comments. Both **top-level handler functions** and **receiver methods** (struct methods) are supported. For receiver methods to be discovered, ensure the method declaration includes doc comments - the generator looks for comments attached to the function or method declaration.
 
-### Won't Work (Struct Methods)
+### Example: receiver method (supported)
 
 ```go
-type UserHandler struct {
-    service UserService
-}
+type UserHandler struct{}
 
-// This annotation won't be parsed correctly
 // @Summary Create user
 func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
     // Implementation
 }
 ```
 
-### Will Work (Top-Level Functions)
+### Example: top-level function (supported)
 
 ```go
-// This will be found and parsed correctly
 // @Summary Create user
-// @Description Create a new user with the provided details
 func CreateUser(w http.ResponseWriter, r *http.Request) {
     // Implementation
-}
-
-// You can still use dependency injection patterns
-func CreateUserWithService(service UserService) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        // Implementation using service
-    }
 }
 ```
 
@@ -563,18 +571,18 @@ func CreateUserWithService(service UserService) http.HandlerFunc {
 ### Full Configuration Example
 
 ```go
-config := openapi.Config{
+config := annot8.Config{
     Title:          "E-Commerce API",
     Description:    "Comprehensive REST API for e-commerce operations",
     Version:        "2.1.0",
     TermsOfService: "https://example.com/terms",
     Server:         "https://api.example.com",
-    Contact: &openapi.Contact{
+    Contact: &annot8.Contact{
         Name:  "E-Commerce API Team",
         Email: "api-team@example.com",
         URL:   "https://example.com/support",
     },
-    License: &openapi.License{
+    License: &annot8.License{
         Name: "Apache 2.0",
         URL:  "https://www.apache.org/licenses/LICENSE-2.0.html",
     },
@@ -585,13 +593,13 @@ config := openapi.Config{
 
 ```go
 // Add support for custom types from external libraries
-openapi.AddExternalKnownType("github.com/shopspring/decimal.Decimal", &openapi.Schema{
+annot8.AddExternalKnownType("github.com/shopspring/decimal.Decimal", &annot8.Schema{
     Type:        "string",
     Description: "Decimal number represented as string",
     Example:     "123.45",
 })
 
-openapi.AddExternalKnownType("github.com/google/uuid.UUID", &openapi.Schema{
+annot8.AddExternalKnownType("github.com/google/uuid.UUID", &annot8.Schema{
     Type:        "string",
     Format:      "uuid",
     Description: "UUID v4",
@@ -605,12 +613,12 @@ The package automatically generates JSON schemas for your Go types with the foll
 
 ### Features
 
--   **Automatic Discovery**: Finds types by scanning your project files
--   **Package-Aware**: Supports both local types (`User`) and package-qualified types (`db.User`)
--   **Struct Tag Support**: Respects `json` tags and `omitempty` directives
--   **Type Mapping**: Maps Go types to appropriate OpenAPI types
--   **Reference Resolution**: Handles circular references and type reuse
--   **Performance Optimized**: Built-in type indexing and caching
+- **Automatic Discovery**: Finds types by scanning your project files
+- **Package-Aware**: Supports both local types (`User`) and package-qualified types (`db.User`)
+- **Struct Tag Support**: Respects `json` tags and `omitempty` directives
+- **Type Mapping**: Maps Go types to appropriate OpenAPI types
+- **Reference Resolution**: Handles circular references and type reuse
+- **Performance Optimized**: Built-in type indexing and caching
 
 ### Type Discovery Process
 
@@ -722,8 +730,30 @@ r.Route("/api/v2", func(r chi.Router) {
 })
 
 // Separate OpenAPI specs for each version
-r.Get("/api/v1/openapi.json", openapi.CachedHandler(r, v1Config))
-r.Get("/api/v2/openapi.json", openapi.CachedHandler(r, v2Config))
+v1 := chi.NewRouter()
+v1.Get("/users", V1ListUsers)
+v1.Post("/users", V1CreateUser)
+r.Mount("/api/v1", v1)
+
+v2 := chi.NewRouter()
+v2.Get("/users", V2ListUsers)
+v2.Post("/users", V2CreateUser)
+r.Mount("/api/v2", v2)
+
+// Serve per-version specs
+r.Get("/api/v1/annot8.json", func(w http.ResponseWriter, req *http.Request) {
+    gen := annot8.NewGenerator()
+    spec := gen.GenerateSpec(v1, v1Config)
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(spec)
+})
+
+r.Get("/api/v2/annot8.json", func(w http.ResponseWriter, req *http.Request) {
+    gen := annot8.NewGenerator()
+    spec := gen.GenerateSpec(v2, v2Config)
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(spec)
+})
 ```
 
 ### Error Handling Best Practices
@@ -755,14 +785,14 @@ func MyHandler(w http.ResponseWriter, r *http.Request) {
 
 ```bash
 # Test the endpoint
-curl http://localhost:8080/openapi | jq .
+curl http://localhost:8080/annot8 | jq .
 
 # Validate with swagger-codegen
-npx @apidevtools/swagger-cli validate http://localhost:8080/openapi
+npx @apidevtools/swagger-cli validate http://localhost:8080/annot8
 
 # Generate client code
-npx @openapitools/openapi-generator-cli generate \
-  -i http://localhost:8080/openapi \
+npx @openapitools/annot8-generator-cli generate \
+  -i http://localhost:8080/annot8.json \
   -g typescript-fetch \
   -o ./generated-client
 ```
@@ -772,7 +802,7 @@ npx @openapitools/openapi-generator-cli generate \
 ```bash
 # Run Swagger UI with Docker
 docker run -p 8080:8080 \
-  -e SWAGGER_JSON_URL=http://host.docker.internal:3000/openapi \
+  -e SWAGGER_JSON_URL=http://host.docker.internal:3000/annot8 \
   swaggerapi/swagger-ui
 
 # Or with docker-compose
@@ -783,7 +813,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SWAGGER_JSON_URL: http://host.docker.internal:3000/openapi
+      SWAGGER_JSON_URL: http://host.docker.internal:3000/annot8.json
 ```
 
 ### Automated Testing
@@ -791,22 +821,14 @@ services:
 ```go
 func TestOpenAPISpec(t *testing.T) {
     router := setupTestRouter()
-    config := openapi.Config{
+    config := annot8.Config{
         Title:   "Test API",
         Version: "1.0.0",
     }
 
-    handler := openapi.CachedHandler(router, config)
+    gen := annot8.NewGenerator()
+    spec := gen.GenerateSpec(router, config)
 
-    req := httptest.NewRequest("GET", "/openapi", nil)
-    w := httptest.NewRecorder()
-    handler(w, req)
-
-    assert.Equal(t, http.StatusOK, w.Code)
-
-    var spec openapi.Spec
-    err := json.Unmarshal(w.Body.Bytes(), &spec)
-    assert.NoError(t, err)
     assert.Equal(t, "3.1.0", spec.OpenAPI)
     assert.Equal(t, "Test API", spec.Info.Title)
 }
@@ -814,25 +836,9 @@ func TestOpenAPISpec(t *testing.T) {
 
 ## Performance & Caching
 
-The package includes several performance optimizations:
+The generator performs type indexing to speed up repeated generations and caches handler resolution during runtime discovery. The package does not provide a global HTTP endpoint or a built-in spec cache/invalidation API - applications should implement caching and invalidation strategies appropriate for their deployment (for example, store the generated JSON on disk or in memory and refresh on deploy or via a custom admin endpoint).
 
--   **Type Index Caching**: Built-in type discovery cache
--   **Spec Caching**: Generated specifications are cached
--   **Smart Invalidation**: Cache invalidation when needed
--   **Lazy Loading**: Types are discovered and parsed on-demand
-
-### Cache Management
-
-```go
-// Invalidate cache programmatically
-openapi.InvalidateCache()
-
-// Force refresh via HTTP
-curl http://localhost:8080/openapi?refresh=true
-
-// Invalidate via endpoint
-curl http://localhost:8080/openapi/invalidate
-```
+**Tip**: To avoid generating the spec on every request in production, generate a static file (via `GenerateOpenAPISpecFile`) as part of your CI/CD pipeline or cache the result in your application.
 
 ## Architecture
 
@@ -852,14 +858,15 @@ The package consists of several main components:
 
 **Problem**: Handler annotations are ignored.
 
-**Solution**: Ensure handlers are top-level functions, not struct methods.
+**Solution**: Ensure your handler functions or methods have the required doc comments (e.g., `// @Summary ...`). Both top-level functions and receiver methods are supported; the generator looks for documentation comments on the function/method declaration.
 
 ```go
-// Wrong
-type Handler struct{}
+// Method with documentation (works)
+// @Summary Create user
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {}
 
-// Correct
+// Top-level function (also works)
+// @Summary Create user
 func Create(w http.ResponseWriter, r *http.Request) {}
 ```
 
@@ -871,7 +878,7 @@ func Create(w http.ResponseWriter, r *http.Request) {}
 
 ```go
 // Add external type mapping
-openapi.AddExternalKnownType("external.Type", &openapi.Schema{
+annot8.AddExternalKnownType("external.Type", &annot8.Schema{
     Type: "object",
     Description: "External type description",
 })
@@ -893,15 +900,15 @@ openapi.AddExternalKnownType("external.Type", &openapi.Schema{
 
 ### Prerequisites
 
--   Go 1.24 or higher
--   Git
+- Go 1.25 or higher
+- Git
 
 ### Setting Up Development Environment
 
 ```bash
 # Clone the repository
-git clone https://github.com/AxelTahmid/openapi-gen.git
-cd openapi-gen
+git clone https://github.com/AxelTahmid/annot8.git
+cd annot8
 
 # Install dependencies
 go mod download
@@ -922,15 +929,15 @@ golangci-lint run
 
 ### Project Structure
 
-```
-openapi-gen/
+```dir
+annot8/
 ├── annotations.go              # Annotation parsing and validation
 ├── annotations_test.go         # Annotation parsing tests
 ├── cache.go                    # Type indexing and caching system
 ├── generator.go                # Core OpenAPI specification generator
 ├── generator_spec_test.go      # Generator integration tests
 ├── handlers.go                 # HTTP handlers for serving specs
-├── openapi_test.go             # OpenAPI generation tests
+├── annot8_test.go             # OpenAPI generation tests
 ├── qualified_names_test.go     # Type name resolution tests
 ├── router_discovery.go         # Chi router route discovery
 ├── router_discovery_test.go    # Router discovery tests
@@ -948,16 +955,16 @@ openapi-gen/
 
 ```bash
 # Run all tests
-make test-openapi
+make test-annot8
 
 # Run with verbose output
-make test-openapi-verbose
+make test-annot8-verbose
 
 # Run specific test
-go test -run TestGenerator_GenerateSpec ./pkg/openapi
+go test -run TestGenerator_GenerateSpec ./pkg/annot8
 
 # Run benchmarks
-go test -bench=BenchmarkGenerateSpec ./pkg/openapi
+go test -bench=BenchmarkGenerateSpec ./pkg/annot8
 ```
 
 ### Contributing Guidelines
@@ -976,35 +983,35 @@ When adding new features:
 
 ### Code Style
 
--   Follow standard Go formatting (`gofmt`)
--   Use meaningful variable and function names
--   Add documentation for exported functions
--   Keep functions focused and small
--   Use structured logging with appropriate levels
+- Follow standard Go formatting (`gofmt`)
+- Use meaningful variable and function names
+- Add documentation for exported functions
+- Keep functions focused and small
+- Use structured logging with appropriate levels
 
 ## Roadmap
 
 ### Immediate Improvements (Community Contributions Welcome)
 
--   [ ] **Better Error Messages**: Improve AST parsing error reporting and debugging
--   [ ] **Enhanced Type Support**: Better support for generics and complex nested types
--   [ ] **Documentation**: More examples and edge case handling
--   [ ] **Performance**: Optimize type discovery for large codebases
--   [ ] **Testing**: Expand test coverage for edge cases
+- [ ] **Better Error Messages**: Improve AST parsing error reporting and debugging
+- [ ] **Enhanced Type Support**: Better support for generics and complex nested types
+- [ ] **Documentation**: More examples and edge case handling
+- [ ] **Performance**: Optimize type discovery for large codebases
+- [ ] **Testing**: Expand test coverage for edge cases
 
 ### Future Possibilities (Not Guaranteed)
 
--   [ ] **OpenAPI 3.1 Full Compliance**: Complete OpenAPI 3.1 specification support
--   [ ] **Validation Integration**: Runtime request/response validation
--   [ ] **Mock Server Generation**: Generate mock servers from specs
--   [ ] **Better SQLC Integration**: Native support for more SQLC patterns
+- [ ] **OpenAPI 3.1 Full Compliance**: Complete OpenAPI 3.1 specification support
+- [ ] **Validation Integration**: Runtime request/response validation
+- [ ] **Mock Server Generation**: Generate mock servers from specs
+- [ ] **Better SQLC Integration**: Native support for more SQLC patterns
 
 ### Explicitly Not Planned
 
--   **Multiple Router Support**: This package is Chi-specific by design
--   **GraphQL Support**: Out of scope for this project
--   **Client Generation**: Use existing OpenAPI client generators
--   **Struct Method Support**: AST limitations make this impractical
+- **Multiple Router Support**: This package is Chi-specific by design
+- **GraphQL Support**: Out of scope for this project
+- **Client Generation**: Use existing OpenAPI client generators
+- **Struct Method Support**: AST limitations make this impractical
 
 **Note**: This project serves a specific need (Chi + SQLC + pgx/v5). Major feature additions should align with this core use case. For other routers or frameworks, consider using more general-purpose OpenAPI generators.
 
@@ -1016,17 +1023,17 @@ See the [CHANGELOG.md](CHANGELOG.md).
 
 ### Getting Help
 
--   **Documentation**: Check this README and code examples
--   **Bug Reports**: Open an issue on GitHub with detailed reproduction steps
--   **Feature Requests**: Open an issue with the `enhancement` label
--   **Questions**: Start a discussion in the repository discussions
+- **Documentation**: Check this README and code examples
+- **Bug Reports**: Open an issue on GitHub with detailed reproduction steps
+- **Feature Requests**: Open an issue with the `enhancement` label
+- **Questions**: Start a discussion in the repository discussions
 
 ### Community Resources
 
--   **GitHub Issues**: Bug reports and feature requests
--   **GitHub Discussions**: Questions and community support
--   **Examples Repository**: Real-world usage examples
--   **Blog Posts**: Tutorials and best practices
+- **GitHub Issues**: Bug reports and feature requests
+- **GitHub Discussions**: Questions and community support
+- **Examples Repository**: Real-world usage examples
+- **Blog Posts**: Tutorials and best practices
 
 ## License
 
@@ -1034,10 +1041,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
--   **Chi Router Team**: For the excellent HTTP router
--   **OpenAPI Initiative**: For the comprehensive API specification standard
--   **Go Community**: For the amazing ecosystem and tools
--   **Contributors**: Everyone who has contributed to this project
+- **Chi Router Team**: For the excellent HTTP router
+- **OpenAPI Initiative**: For the comprehensive API specification standard
+- **Go Community**: For the amazing ecosystem and tools
+- **Contributors**: Everyone who has contributed to this project
 
 ---
 

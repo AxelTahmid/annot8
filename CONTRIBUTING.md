@@ -1,12 +1,12 @@
-# Contributing to OpenApi Gen
+# Contributing to Annot8
 
-We want to make contributing to OpenApi Gen as easy and transparent as possible, whether it's:
+We want to make contributing to Annot8 as easy and transparent as possible, whether it's:
 
--   Reporting a bug
--   Discussing the current state of the code
--   Submitting a fix
--   Proposing new features
--   Becoming a maintainer
+- Reporting a bug
+- Discussing the current state of the code
+- Submitting a fix
+- Proposing new features
+- Becoming a maintainer
 
 ## Development Process
 
@@ -21,16 +21,16 @@ We use GitHub to host code, to track issues and feature requests, as well as acc
 
 ## Prerequisites
 
--   Go 1.24 or higher
--   Git
--   golangci-lint (for linting)
+- Go 1.25 or higher
+- Git
+- golangci-lint (for linting)
 
 ## Setting Up Development Environment
 
 ```bash
 # Fork and clone the repository
-git clone https://github.com/AxelTahmid/openapi-gen.git
-cd openapi-gen
+git clone https://github.com/AxelTahmid/annot8.git
+cd annot8
 
 # Install dependencies
 go mod download
@@ -54,10 +54,10 @@ go test -race -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 
 # Run specific test file
-go test -v ./pkg/openapi -run TestGenerator
+go test -v ./pkg/annot8 -run TestGenerator
 
 # Run benchmarks
-go test -bench=. ./pkg/openapi
+go test -bench=. ./pkg/annot8
 ```
 
 ### Test Categories
@@ -68,11 +68,11 @@ go test -bench=. ./pkg/openapi
 
 ### Writing Tests
 
--   Follow Go testing conventions
--   Use table-driven tests for multiple test cases
--   Include both positive and negative test cases
--   Test edge cases and error conditions
--   Aim for >90% test coverage
+- Follow Go testing conventions
+- Use table-driven tests for multiple test cases
+- Include both positive and negative test cases
+- Test edge cases and error conditions
+- Aim for >90% test coverage
 
 Example test structure:
 
@@ -117,24 +117,24 @@ func TestMyFunction(t *testing.T) {
 
 ### Formatting
 
--   Use `gofmt` to format your code
--   Follow standard Go naming conventions
--   Use meaningful variable and function names
--   Keep functions small and focused
+- Use `gofmt` to format your code
+- Follow standard Go naming conventions
+- Use meaningful variable and function names
+- Keep functions small and focused
 
 ### Documentation
 
--   Document all exported functions, types, and variables
--   Use complete sentences in comments
--   Include examples for complex functions
--   Keep comments up to date with code changes
+- Document all exported functions, types, and variables
+- Use complete sentences in comments
+- Include examples for complex functions
+- Keep comments up to date with code changes
 
 ### Error Handling
 
--   Always handle errors appropriately
--   Use meaningful error messages
--   Prefer returning errors over panicking
--   Use structured logging for debugging
+- Always handle errors appropriately
+- Use meaningful error messages
+- Prefer returning errors over panicking
+- Use structured logging for debugging
 
 Example:
 
@@ -171,10 +171,10 @@ golangci-lint run --fix
 
 ### Performance
 
--   Use benchmarks to measure performance impact
--   Avoid unnecessary allocations in hot paths
--   Use profiling tools to identify bottlenecks
--   Consider memory usage, especially for large projects
+- Use benchmarks to measure performance impact
+- Avoid unnecessary allocations in hot paths
+- Use profiling tools to identify bottlenecks
+- Consider memory usage, especially for large projects
 
 ## Pull Request Process
 
@@ -218,12 +218,12 @@ golangci-lint run --fix
 
 ### Pull Request Guidelines
 
--   Use a clear and descriptive title
--   Include a detailed description of changes
--   Reference any related issues
--   Include screenshots for UI changes
--   Ensure CI checks pass
--   Request review from maintainers
+- Use a clear and descriptive title
+- Include a detailed description of changes
+- Reference any related issues
+- Include screenshots for UI changes
+- Ensure CI checks pass
+- Request review from maintainers
 
 ## Reporting Bugs
 
@@ -233,13 +233,13 @@ We use GitHub issues to track public bugs. Report a bug by opening a new issue.
 
 When reporting bugs, please include:
 
--   **Summary**: Brief description of the bug
--   **Environment**: Go version, OS, relevant versions
--   **Steps to Reproduce**: Detailed steps to reproduce the issue
--   **Expected Behavior**: What you expected to happen
--   **Actual Behavior**: What actually happened
--   **Code Sample**: Minimal code that reproduces the issue
--   **Additional Context**: Screenshots, logs, etc.
+- **Summary**: Brief description of the bug
+- **Environment**: Go version, OS, relevant versions
+- **Steps to Reproduce**: Detailed steps to reproduce the issue
+- **Expected Behavior**: What you expected to happen
+- **Actual Behavior**: What actually happened
+- **Code Sample**: Minimal code that reproduces the issue
+- **Additional Context**: Screenshots, logs, etc.
 
 Example:
 
@@ -252,7 +252,7 @@ OpenAPI generation fails when using pointer to slice types
 
 ### Environment
 
--   Go version: 1.24.5
+-   Go version: 1.25.0
 -   OS: macOS 14.1
 -   OpenApi Gen version: v0.1.0
 
@@ -285,20 +285,20 @@ WeI welcome feature requests! Please use GitHub issues with the `enhancement` la
 
 ### Feature Request Template
 
--   **Summary**: Brief description of the feature
--   **Motivation**: Why this feature would be useful
--   **Detailed Description**: How the feature should work
--   **Use Cases**: Real-world scenarios where this helps
--   **Implementation Ideas**: Suggestions for implementation
--   **Breaking Changes**: Any potential breaking changes
+- **Summary**: Brief description of the feature
+- **Motivation**: Why this feature would be useful
+- **Detailed Description**: How the feature should work
+- **Use Cases**: Real-world scenarios where this helps
+- **Implementation Ideas**: Suggestions for implementation
+- **Breaking Changes**: Any potential breaking changes
 
 ## Release Process
 
 Our release process follows semantic versioning:
 
--   **Major versions** (1.0.0): Breaking changes
--   **Minor versions** (1.1.0): New features, backward compatible
--   **Patch versions** (1.1.1): Bug fixes, backward compatible
+- **Major versions** (1.0.0): Breaking changes
+- **Minor versions** (1.1.0): New features, backward compatible
+- **Patch versions** (1.1.1): Bug fixes, backward compatible
 
 ### Release Checklist
 
@@ -313,13 +313,13 @@ Our release process follows semantic versioning:
 
 We use labels to categorize issues:
 
--   `bug`: Something isn't working
--   `enhancement`: New feature or request
--   `documentation`: Improvements or additions to documentation
--   `good first issue`: Good for newcomers
--   `help wanted`: Extra attention is needed
--   `performance`: Performance-related issues
--   `breaking change`: Would break existing functionality
+- `bug`: Something isn't working
+- `enhancement`: New feature or request
+- `documentation`: Improvements or additions to documentation
+- `good first issue`: Good for newcomers
+- `help wanted`: Extra attention is needed
+- `performance`: Performance-related issues
+- `breaking change`: Would break existing functionality
 
 ## Development Tips
 
@@ -346,17 +346,17 @@ go mod tidy
 
 ### Debugging
 
--   Use the `-v` flag for verbose test output
--   Use `log/slog` for structured logging
--   Use the debugger (delve) for complex issues
--   Add temporary print statements sparingly
+- Use the `-v` flag for verbose test output
+- Use `log/slog` for structured logging
+- Use the debugger (delve) for complex issues
+- Add temporary print statements sparingly
 
 ### Performance Tips
 
--   Use benchmarks to measure performance
--   Profile CPU and memory usage
--   Avoid premature optimization
--   Focus on algorithmic improvements first
+- Use benchmarks to measure performance
+- Profile CPU and memory usage
+- Avoid premature optimization
+- Focus on algorithmic improvements first
 
 ## Community Guidelines
 
@@ -364,56 +364,56 @@ go mod tidy
 
 This project adheres to a code of conduct that we expect all participants to follow:
 
--   Be respectful and inclusive
--   Welcome newcomers and help them learn
--   Focus on what's best for the community
--   Show empathy towards other community members
+- Be respectful and inclusive
+- Welcome newcomers and help them learn
+- Focus on what's best for the community
+- Show empathy towards other community members
 
 ### Communication
 
--   Use clear, concise language
--   Be patient with questions and suggestions
--   Provide constructive feedback
--   Celebrate contributions and achievements
+- Use clear, concise language
+- Be patient with questions and suggestions
+- Provide constructive feedback
+- Celebrate contributions and achievements
 
 ## Recognition
 
 Contributors will be recognized in:
 
--   The project README
--   Release notes for significant contributions
--   GitHub contributor statistics
--   Special recognition for major features
+- The project README
+- Release notes for significant contributions
+- GitHub contributor statistics
+- Special recognition for major features
 
 ## Resources
 
 ### Go Resources
 
--   [Effective Go](https://golang.org/doc/effective_go.html)
--   [Go Code Review Comments](https://github.com/golang/go/wiki/CodeReviewComments)
--   [Go Testing](https://golang.org/pkg/testing/)
+- [Effective Go](https://golang.org/doc/effective_go.html)
+- [Go Code Review Comments](https://github.com/golang/go/wiki/CodeReviewComments)
+- [Go Testing](https://golang.org/pkg/testing/)
 
 ### OpenAPI Resources
 
--   [OpenAPI Specification](https://spec.openapis.org/oas/v3.1.0)
--   [Swagger Documentation](https://swagger.io/docs/)
+- [OpenAPI Specification](https://spec.openapis.org/oas/v3.1.0)
+- [Swagger Documentation](https://swagger.io/docs/)
 
 ### Project Resources
 
--   [Project Issues](https://github.com/AxelTahmid/openapi-gen/issues)
--   [Project Discussions](https://github.com/AxelTahmid/openapi-gen/discussions)
--   [Project Wiki](https://github.com/AxelTahmid/openapi-gen/wiki)
+- [Project Issues](https://github.com/AxelTahmid/annot8/issues)
+- [Project Discussions](https://github.com/AxelTahmid/annot8/discussions)
+- [Project Wiki](https://github.com/AxelTahmid/annot8/wiki)
 
 ## Questions?
 
 Don't hesitate to ask questions:
 
--   Open a discussion on GitHub
--   Comment on relevant issues
--   Reach out to maintainers
+- Open a discussion on GitHub
+- Comment on relevant issues
+- Reach out to maintainers
 
 We're here to help make your contribution experience great!
 
 ---
 
-Thank you for contributing to OpenApi Gen! 🎉
+Thank you for contributing to Annot8! 🎉
