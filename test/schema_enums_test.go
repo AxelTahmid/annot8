@@ -73,13 +73,13 @@ func TestGenerateSchema_NullableEnumFromSqlc(t *testing.T) {
 
 	// Simulate a struct that contains a nullable enum field (like NullBillingModel)
 	// The issue might manifest here if the code isn't properly detecting enum types
-	result := sg.GenerateSchema("sqlc.Coupon")
+	result := sg.GenerateSchema("annot8.Coupon")
 	if result.Ref == "" {
 		t.Fatalf("expected struct schema reference, got %+v", result)
 	}
 
 	schemas := sg.GetSchemas()
-	couponSchema, ok := schemas["sqlc.Coupon"]
+	couponSchema, ok := schemas["annot8.Coupon"]
 	if !ok {
 		t.Fatalf("expected Coupon schema to be stored, got keys: %v", SchemaKeys(schemas))
 	}
@@ -245,13 +245,13 @@ func TestEnumEdgeCase_RealWorldSqlcExample(t *testing.T) {
 	sg := NewTestSchemaGenerator()
 
 	// Test the actual DiscountType from sqlc
-	result := sg.GenerateSchema("sqlc.DiscountType")
+	result := sg.GenerateSchema("annot8.DiscountType")
 	if result.Ref == "" {
 		t.Fatalf("expected enum reference, got %+v", result)
 	}
 
 	schemas := sg.GetSchemas()
-	enumSchema, ok := schemas["sqlc.DiscountType"]
+	enumSchema, ok := schemas["annot8.DiscountType"]
 	if !ok {
 		t.Fatalf("expected DiscountType schema to be generated")
 	}
