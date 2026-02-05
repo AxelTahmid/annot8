@@ -1,4 +1,3 @@
-// Package annot8 provides struct-to-schema conversion logic.
 package annot8
 
 import (
@@ -106,9 +105,13 @@ func (sg *SchemaGenerator) convertFieldType(expr ast.Expr) *Schema {
 	switch t := expr.(type) {
 	case *ast.Ident:
 		// Basic Go types
-		basic := mapGoTypeToOpenAPI(t.Name)
-		if basic != "object" {
-			return &Schema{Type: basic}
+		basicType, basicFormat := mapGoTypeToOpenAPI(t.Name)
+		if basicType != "object" {
+			schema := &Schema{Type: basicType}
+			if basicFormat != "" {
+				schema.Format = basicFormat
+			}
+			return schema
 		}
 		// Custom types
 		qualified := sg.getQualifiedTypeName(t.Name)

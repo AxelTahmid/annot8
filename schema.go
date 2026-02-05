@@ -128,10 +128,13 @@ func (sg *SchemaGenerator) GenerateSchema(typeName string) *Schema {
 			"qualifiedName",
 			qualifiedName,
 		)
-		basicType := mapGoTypeToOpenAPI(qualifiedName)
+		basicType, basicFormat := mapGoTypeToOpenAPI(qualifiedName)
 		built = &Schema{
 			Type:        basicType,
 			Description: "externally defined or unknown",
+		}
+		if basicFormat != "" {
+			built.Format = basicFormat
 		}
 	}
 
