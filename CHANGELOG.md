@@ -1,5 +1,12 @@
 ## Changelog
 
+## [0.5.0](https://github.com/AxelTahmid/annot8/compare/v0.4.0...v0.5.0) (2026-02-05)
+
+
+### Features
+
+* enhance OpenAPI type mapping to include formats for basic types ([72327eb](https://github.com/AxelTahmid/annot8/commit/72327eb18ce25826c880ed45fba6d307030d6e75))
+
 ## [0.4.0](https://github.com/AxelTahmid/annot8/compare/v0.3.0...v0.4.0) (2026-02-03)
 
 
