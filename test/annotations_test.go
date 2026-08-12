@@ -1,4 +1,4 @@
-package annot8_test
+package annot8fixtures_test
 
 import (
 	"os"
@@ -20,6 +20,7 @@ import (
 // @Param id path int true "ID param"
 // @Param q query string false "Query param"
 // @Success 200 {object} TestResponse "Success desc"
+// @Success 201 {object} TestResponse "Created desc"
 // @Failure 400 {object} ProblemDetails "Bad request"
 func HandlerWithAnnotations() {}
 
@@ -53,11 +54,37 @@ func TestParseAnnotations_AllAnnotations(t *testing.T) {
 	if len(annotation.Security) != 1 || annotation.Security[0] != "ApiKeyAuth" {
 		t.Errorf("expected Security [ApiKeyAuth], got %v", annotation.Security)
 	}
-	if annotation.Success == nil || annotation.Success.DataType != "TestResponse" {
-		t.Errorf("expected success DataType 'TestResponse', got %+v", annotation.Success)
+	if len(annotation.Successes) != 2 {
+		t.Fatalf("expected 2 success responses, got %+v", annotation.Successes)
+	}
+	if annotation.Successes[0].DataType != "TestResponse" || annotation.Successes[0].StatusCode != 200 {
+		t.Errorf("unexpected first success annotation: %+v", annotation.Successes[0])
+	}
+	if annotation.Successes[1].StatusCode != 201 {
+		t.Errorf("unexpected second success annotation: %+v", annotation.Successes[1])
 	}
 	if len(annotation.Failures) != 1 || annotation.Failures[0].StatusCode != 400 {
 		t.Errorf("expected failure 400, got %+v", annotation.Failures)
+	}
+}
+
+// HandlerWithInvalidParamAnnotation exercises parse error propagation.
+// @Summary Invalid handler
+// @Tags test
+// @Success 200 {object} TestResponse "ok"
+// @Param malformed
+func HandlerWithInvalidParamAnnotation() {}
+
+func TestParseAnnotations_ParseErrorReturned(t *testing.T) {
+	annotation, err := annot8.ParseAnnotations("annotations_test.go", "HandlerWithInvalidParamAnnotation")
+	if annotation == nil {
+		t.Fatal("expected partial annotation even when parsing errors occur")
+	}
+	if err == nil {
+		t.Fatal("expected parse error for malformed annotation")
+	}
+	if !strings.Contains(err.Error(), "invalid @Param annotation") {
+		t.Fatalf("unexpected parse error: %v", err)
 	}
 }
 
@@ -144,7 +171,7 @@ func TestParseAnnotations_WindowsStylePath(t *testing.T) {
 // @Description This handler is used in tests only
 func Handler() {}
 `
-	if err := os.WriteFile(filePath, []byte(source), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte(source), 0o600); err != nil {
 		t.Fatalf("failed to write temp handler: %v", err)
 	}
 	windowsPath := strings.ReplaceAll(filePath, string(filepath.Separator), "\\")

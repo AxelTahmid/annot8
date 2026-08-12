@@ -1,4 +1,4 @@
-package annot8_test
+package annot8fixtures_test
 
 import (
 	"net/http"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	annot8 "github.com/AxelTahmid/annot8"
+	"github.com/AxelTahmid/annot8"
 )
 
 // TestGenerateSpecRoutes ensures that GenerateSpec includes discovered routes and parameters.
@@ -149,16 +149,16 @@ func TestGenerateSpec_MenuCouponCollision(t *testing.T) {
 
 	// Check that both paths exist
 	paths := spec.Paths
-	if _, ok := paths["/api/v1/menu/"]; !ok {
-		t.Fatalf("expected path '/api/v1/menu/' in spec.Paths")
+	if _, ok := paths["/api/v1/menu"]; !ok {
+		t.Fatalf("expected path '/api/v1/menu' in spec.Paths")
 	}
-	if _, ok := paths["/api/v1/coupon/"]; !ok {
-		t.Fatalf("expected path '/api/v1/coupon/' in spec.Paths")
+	if _, ok := paths["/api/v1/coupon"]; !ok {
+		t.Fatalf("expected path '/api/v1/coupon' in spec.Paths")
 	}
 
 	// Get the operations
-	menuOps := paths["/api/v1/menu/"]
-	couponOps := paths["/api/v1/coupon/"]
+	menuOps := paths["/api/v1/menu"]
+	couponOps := paths["/api/v1/coupon"]
 
 	// Check GET operations exist
 	menuGet := menuOps.Get
@@ -267,6 +267,159 @@ func TestGenerateSpec_ModelRenaming(t *testing.T) {
 	}
 }
 
+func TestGenerateSpec_RefreshCookieSecurity(t *testing.T) {
+	r := chi.NewRouter()
+	r.Post("/api/v1/auth/refresh", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	cfg := annot8.Config{Title: "Test API", Version: "1.0.0"}
+	g := annot8.NewGenerator()
+	spec := g.GenerateSpec(r, cfg)
+
+	secScheme, ok := spec.Components.SecuritySchemes["RefreshTokenCookieAuth"]
+	if !ok {
+		t.Fatal("expected RefreshTokenCookieAuth security scheme")
+	}
+	if secScheme.Type != "apiKey" || secScheme.In != "cookie" || secScheme.Name != "refresh_token" {
+		t.Fatalf("unexpected refresh cookie security scheme: %+v", secScheme)
+	}
+
+	op := spec.Paths["/api/v1/auth/refresh"].Post
+	if op == nil {
+		t.Fatal("expected POST operation for /api/v1/auth/refresh")
+	}
+	if len(op.Security) != 1 {
+		t.Fatalf("expected one security requirement, got %d", len(op.Security))
+	}
+	if _, ok = op.Security[0]["RefreshTokenCookieAuth"]; !ok {
+		t.Fatalf("expected RefreshTokenCookieAuth in operation security: %+v", op.Security)
+	}
+}
+
+func TestGenerateSpec_TerminalHeaderSecurity(t *testing.T) {
+	r := chi.NewRouter()
+	r.With(RequireTerminal()).
+		Post("/api/v1/user/terminals/{id}/sync", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	cfg := annot8.Config{Title: "Test API", Version: "1.0.0"}
+	g := annot8.NewGenerator()
+	spec := g.GenerateSpec(r, cfg)
+
+	secScheme, ok := spec.Components.SecuritySchemes["TerminalTokenAuth"]
+	if !ok {
+		t.Fatal("expected TerminalTokenAuth security scheme")
+	}
+	if secScheme.Type != "apiKey" || secScheme.In != "header" || secScheme.Name != "X-Terminal-Token" {
+		t.Fatalf("unexpected terminal token security scheme: %+v", secScheme)
+	}
+
+	op := spec.Paths["/api/v1/user/terminals/{id}/sync"].Post
+	if op == nil {
+		t.Fatal("expected POST operation for /api/v1/user/terminals/{id}/sync")
+	}
+	if len(op.Security) != 1 {
+		t.Fatalf("expected one security requirement, got %d", len(op.Security))
+	}
+	if _, ok = op.Security[0]["TerminalTokenAuth"]; !ok {
+		t.Fatalf("expected TerminalTokenAuth in operation security: %+v", op.Security)
+	}
+}
+
+func TestGenerateSpec_IsTenantImpliesBearerByDefault(t *testing.T) {
+	r := chi.NewRouter()
+	r.With(IsTenant).Post("/api/v1/auth/customer/register", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	cfg := annot8.Config{Title: "Test API", Version: "1.0.0"}
+	g := annot8.NewGenerator()
+	spec := g.GenerateSpec(r, cfg)
+
+	op := spec.Paths["/api/v1/auth/customer/register"].Post
+	if op == nil {
+		t.Fatal("expected POST operation for /api/v1/auth/customer/register")
+	}
+	if len(op.Security) != 1 {
+		t.Fatalf("expected one security requirement object, got: %+v", op.Security)
+	}
+	if _, ok := op.Security[0]["BearerAuth"]; !ok {
+		t.Fatalf("expected BearerAuth for IsTenant by default mapping: %+v", op.Security)
+	}
+}
+
+func TestGenerateSpec_RequireDualIdentityAddsBothSchemes(t *testing.T) {
+	r := chi.NewRouter()
+	r.With(RequireDualIdentity).Post("/api/v1/user/terminals/{id}/dual", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	cfg := annot8.Config{Title: "Test API", Version: "1.0.0"}
+	g := annot8.NewGenerator()
+	spec := g.GenerateSpec(r, cfg)
+
+	op := spec.Paths["/api/v1/user/terminals/{id}/dual"].Post
+	if op == nil {
+		t.Fatal("expected POST operation for /api/v1/user/terminals/{id}/dual")
+	}
+	if len(op.Security) != 1 {
+		t.Fatalf("expected one security requirement object, got %d", len(op.Security))
+	}
+	if _, ok := op.Security[0]["BearerAuth"]; !ok {
+		t.Fatalf("expected BearerAuth in operation security: %+v", op.Security)
+	}
+	if _, ok := op.Security[0]["TerminalTokenAuth"]; !ok {
+		t.Fatalf("expected TerminalTokenAuth in operation security: %+v", op.Security)
+	}
+}
+
+func TestGenerateSpec_JWTNameFallbackAddsBearer(t *testing.T) {
+	jwtGuard := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	r := chi.NewRouter()
+	r.With(jwtGuard).Get("/api/v1/fallback/jwt", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	cfg := annot8.Config{Title: "Test API", Version: "1.0.0"}
+	g := annot8.NewGenerator()
+	spec := g.GenerateSpec(r, cfg)
+
+	op := spec.Paths["/api/v1/fallback/jwt"].Get
+	if op == nil {
+		t.Fatal("expected GET operation for /api/v1/fallback/jwt")
+	}
+	if len(op.Security) != 1 {
+		t.Fatalf("expected one security requirement object, got %d", len(op.Security))
+	}
+	if _, ok := op.Security[0]["BearerAuth"]; !ok {
+		t.Fatalf("expected BearerAuth via jwt name fallback: %+v", op.Security)
+	}
+}
+
+func TestGenerateSpec_CustomSecurityInferenceOverride(t *testing.T) {
+	r := chi.NewRouter()
+	r.With(IsTenant).Post("/api/v1/custom/security", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	custom := annot8.DefaultSecurityInferenceConfig()
+	custom.MiddlewareRules = []annot8.MiddlewareSecurityRule{
+		{RuleContains: "RequireTerminal", Schemes: []string{"TerminalTokenAuth"}},
+	}
+	custom.EnableACLBearerFromPermissions = false
+
+	cfg := annot8.Config{
+		Title:             "Test API",
+		Version:           "1.0.0",
+		SecurityInference: &custom,
+	}
+	g := annot8.NewGenerator()
+	spec := g.GenerateSpec(r, cfg)
+
+	op := spec.Paths["/api/v1/custom/security"].Post
+	if op == nil {
+		t.Fatal("expected POST operation for /api/v1/custom/security")
+	}
+	if len(op.Security) != 0 {
+		t.Fatalf("expected no security after override removed IsTenant/Bearer mapping, got: %+v", op.Security)
+	}
+}
+
 func TestGenerateSpec_ConflictResolution(t *testing.T) {
 	cfg := annot8.Config{Title: "Conflict Test", Version: "1.0.0"}
 	g := annot8.NewGenerator()
@@ -296,5 +449,47 @@ func TestGenerateSpec_ConflictResolution(t *testing.T) {
 			keys = append(keys, k)
 		}
 		t.Errorf("expected 'ConflictModel2', but got keys: %v", keys)
+	}
+}
+
+type queryObjectHandler struct{}
+
+// @Summary List orders
+// @Description List orders with query-object parameters
+// @Tags order
+// @Param query query order.ListOrdersRequest false "Order list filters and cursor pagination"
+// @Success 200 {data} []sqlc.ListOrdersRow "ok"
+func (h *queryObjectHandler) list(w http.ResponseWriter, r *http.Request) {}
+
+func TestGenerateSpec_QueryObjectParamExpansion(t *testing.T) {
+	r := chi.NewRouter()
+	h := &queryObjectHandler{}
+	r.Get("/orders", http.HandlerFunc(h.list))
+
+	cfg := annot8.Config{Title: "Query Object Test", Version: "1.0.0"}
+	g := annot8.NewGenerator()
+	spec := g.GenerateSpec(r, cfg)
+
+	op := spec.Paths["/orders"].Get
+	if op == nil {
+		t.Fatal("expected GET operation for /orders")
+	}
+
+	if len(op.Parameters) == 0 {
+		t.Fatal("expected expanded query parameters")
+	}
+
+	has := map[string]bool{}
+	for _, p := range op.Parameters {
+		has[p.Name] = true
+		if p.Name == "query" {
+			t.Fatalf("query object marker should not appear as a literal query parameter: %+v", p)
+		}
+	}
+
+	for _, name := range []string{"store_id", "status", "limit", "after_id", "before_id"} {
+		if !has[name] {
+			t.Errorf("expected expanded query parameter %q", name)
+		}
 	}
 }

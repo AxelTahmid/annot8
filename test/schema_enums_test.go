@@ -1,23 +1,23 @@
-package annot8_test
+package annot8fixtures_test
 
 import (
 	"testing"
 
-	annot8 "github.com/AxelTahmid/annot8"
+	"github.com/AxelTahmid/annot8"
 )
 
 func TestGenerateSchema_EnumType(t *testing.T) {
 	sg := NewTestSchemaGenerator()
 
-	result := sg.GenerateSchema("annot8.MyEnum")
+	result := sg.GenerateSchema("annot8fixtures.MyEnum")
 	if result.Ref == "" {
 		t.Fatalf("expected enum schema to be returned as reference, got %+v", result)
 	}
 
 	schemas := sg.GetSchemas()
-	enumSchema, ok := schemas["annot8.MyEnum"]
+	enumSchema, ok := schemas["annot8fixtures.MyEnum"]
 	if !ok {
-		t.Fatalf("expected enum schema to be stored under 'annot8.MyEnum', got %v", schemas)
+		t.Fatalf("expected enum schema to be stored under 'annot8fixtures.MyEnum', got %v", schemas)
 	}
 	AssertEqual(t, "string", enumSchema.Type)
 	AssertDeepEqual(t, []interface{}{"A", "B"}, enumSchema.Enum)
@@ -27,13 +27,13 @@ func TestGenerateSchema_EnumFieldInStruct(t *testing.T) {
 	sg := NewTestSchemaGenerator()
 
 	// Generate schema for a struct containing an enum field
-	result := sg.GenerateSchema("annot8.TestWithEnumField")
+	result := sg.GenerateSchema("annot8fixtures.TestWithEnumField")
 	if result.Ref == "" {
 		t.Fatalf("expected struct schema to be returned as reference, got %+v", result)
 	}
 
 	schemas := sg.GetSchemas()
-	structSchema, ok := schemas["annot8.TestWithEnumField"]
+	structSchema, ok := schemas["annot8fixtures.TestWithEnumField"]
 	if !ok {
 		t.Fatalf("expected stored schema for TestWithEnumField, got %v", schemas)
 	}
@@ -51,14 +51,14 @@ func TestGenerateSchema_EnumFieldInStruct(t *testing.T) {
 			t.Error("ENUM BUG DETECTED: Enum is inlined in struct instead of being referenced!")
 		}
 	} else {
-		expectedRef := "#/components/schemas/annot8.MyEnum"
+		expectedRef := "#/components/schemas/annot8fixtures.MyEnum"
 		if statusProp.Ref != expectedRef {
 			t.Errorf("expected reference '%s', got '%s'", expectedRef, statusProp.Ref)
 		}
 	}
 
 	// Verify the enum schema itself is properly stored
-	enumSchema, ok := schemas["annot8.MyEnum"]
+	enumSchema, ok := schemas["annot8fixtures.MyEnum"]
 	if !ok {
 		t.Fatalf("expected enum schema to be stored, got %v", schemas)
 	}
@@ -73,13 +73,13 @@ func TestGenerateSchema_NullableEnumFromSqlc(t *testing.T) {
 
 	// Simulate a struct that contains a nullable enum field (like NullBillingModel)
 	// The issue might manifest here if the code isn't properly detecting enum types
-	result := sg.GenerateSchema("annot8.Coupon")
+	result := sg.GenerateSchema("sqlc.Coupon")
 	if result.Ref == "" {
 		t.Fatalf("expected struct schema reference, got %+v", result)
 	}
 
 	schemas := sg.GetSchemas()
-	couponSchema, ok := schemas["annot8.Coupon"]
+	couponSchema, ok := schemas["sqlc.Coupon"]
 	if !ok {
 		t.Fatalf("expected Coupon schema to be stored, got keys: %v", SchemaKeys(schemas))
 	}
@@ -128,14 +128,14 @@ func TestGenerateSchema_EnumWithTag(t *testing.T) {
 
 	// Add a test struct that has an enum field with OpenAPI tags
 	// This tests the bug where applyEnhancedTags modifies referenced schemas
-	t.Run("enum field with annot8 tags should remain a reference", func(t *testing.T) {
-		result := sg.GenerateSchema("annot8.TestWithEnumField")
+	t.Run("enum field with openapi tags should remain a reference", func(t *testing.T) {
+		result := sg.GenerateSchema("annot8fixtures.TestWithEnumField")
 		if result.Ref == "" {
 			t.Fatalf("expected struct schema reference, got %+v", result)
 		}
 
 		schemas := sg.GetSchemas()
-		structSchema, ok := schemas["annot8.TestWithEnumField"]
+		structSchema, ok := schemas["annot8fixtures.TestWithEnumField"]
 		if !ok {
 			t.Fatalf("expected TestWithEnumField schema")
 		}
@@ -146,7 +146,7 @@ func TestGenerateSchema_EnumWithTag(t *testing.T) {
 		}
 
 		// Verify the reference is correct
-		if statusProp.Ref != "#/components/schemas/annot8.MyEnum" {
+		if statusProp.Ref != "#/components/schemas/annot8fixtures.MyEnum" {
 			t.Errorf("expected reference to MyEnum, got %s", statusProp.Ref)
 		}
 
@@ -184,13 +184,13 @@ func TestEnumReference_NotCorruptedByTags(t *testing.T) {
 	sg := NewTestSchemaGenerator()
 
 	// Generate a struct with an enum field that might have tags
-	result := sg.GenerateSchema("annot8.TestWithEnumField")
+	result := sg.GenerateSchema("annot8fixtures.TestWithEnumField")
 	if result.Ref == "" {
 		t.Fatalf("expected struct schema reference")
 	}
 
 	schemas := sg.GetSchemas()
-	structSchema := schemas["annot8.TestWithEnumField"]
+	structSchema := schemas["annot8fixtures.TestWithEnumField"]
 
 	statusField := structSchema.Properties["status"]
 
@@ -200,7 +200,7 @@ func TestEnumReference_NotCorruptedByTags(t *testing.T) {
 	}
 
 	// Verify reference is correct
-	AssertEqual(t, "#/components/schemas/annot8.MyEnum", statusField.Ref)
+	AssertEqual(t, "#/components/schemas/annot8fixtures.MyEnum", statusField.Ref)
 
 	// Per OpenAPI 3.1: A schema object containing a $ref property SHOULD NOT contain
 	// any other properties except description, examples, and metadata keywords
@@ -221,13 +221,13 @@ func TestEnumEdgeCase_NoConstantsFound(t *testing.T) {
 	// This test checks if maybe the code is falling back to inlining a string with
 	// just one value when no enum constants are found
 
-	result := sg.GenerateSchema("annot8.TypeWithoutConstants")
+	result := sg.GenerateSchema("annot8fixtures.TypeWithoutConstants")
 	if result.Ref == "" {
 		t.Fatalf("expected reference, got %+v", result)
 	}
 
 	schemas := sg.GetSchemas()
-	schema, ok := schemas["annot8.TypeWithoutConstants"]
+	schema, ok := schemas["annot8fixtures.TypeWithoutConstants"]
 	if !ok {
 		// If type is not in typeindex, it returns the fallback
 		t.Logf("Type not indexed, this is expected for non-existent types")
@@ -245,13 +245,13 @@ func TestEnumEdgeCase_RealWorldSqlcExample(t *testing.T) {
 	sg := NewTestSchemaGenerator()
 
 	// Test the actual DiscountType from sqlc
-	result := sg.GenerateSchema("annot8.DiscountType")
+	result := sg.GenerateSchema("sqlc.DiscountType")
 	if result.Ref == "" {
 		t.Fatalf("expected enum reference, got %+v", result)
 	}
 
 	schemas := sg.GetSchemas()
-	enumSchema, ok := schemas["annot8.DiscountType"]
+	enumSchema, ok := schemas["sqlc.DiscountType"]
 	if !ok {
 		t.Fatalf("expected DiscountType schema to be generated")
 	}
@@ -290,13 +290,13 @@ func TestEnumEdgeCase_RealWorldSqlcExample(t *testing.T) {
 func TestEnumEdgeCase_ImplicitType(t *testing.T) {
 	sg := NewTestSchemaGenerator()
 
-	result := sg.GenerateSchema("annot8.StatusEnum")
+	result := sg.GenerateSchema("annot8fixtures.StatusEnum")
 	if result.Ref == "" {
 		t.Fatalf("expected enum reference, got %+v", result)
 	}
 
 	schemas := sg.GetSchemas()
-	enumSchema, ok := schemas["annot8.StatusEnum"]
+	enumSchema, ok := schemas["annot8fixtures.StatusEnum"]
 	if !ok {
 		t.Fatalf("expected StatusEnum schema")
 	}
@@ -337,24 +337,24 @@ func TestEnumEdgeCase_ImplicitType(t *testing.T) {
 func TestEnumEdgeCase_MultipleTypesInBlock(t *testing.T) {
 	sg := NewTestSchemaGenerator()
 
-	resultA := sg.GenerateSchema("annot8.TypeA")
+	resultA := sg.GenerateSchema("annot8fixtures.TypeA")
 	if resultA.Ref == "" {
 		t.Fatalf("expected TypeA enum reference, got %+v", resultA)
 	}
 
-	resultB := sg.GenerateSchema("annot8.TypeB")
+	resultB := sg.GenerateSchema("annot8fixtures.TypeB")
 	if resultB.Ref == "" {
 		t.Fatalf("expected TypeB enum reference, got %+v", resultB)
 	}
 
 	schemas := sg.GetSchemas()
 
-	schemaA, ok := schemas["annot8.TypeA"]
+	schemaA, ok := schemas["annot8fixtures.TypeA"]
 	if !ok {
 		t.Fatalf("expected TypeA schema")
 	}
 
-	schemaB, ok := schemas["annot8.TypeB"]
+	schemaB, ok := schemas["annot8fixtures.TypeB"]
 	if !ok {
 		t.Fatalf("expected TypeB schema")
 	}

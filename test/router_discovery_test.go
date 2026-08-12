@@ -1,4 +1,4 @@
-package annot8_test
+package annot8fixtures_test
 
 import (
 	"errors"
@@ -68,12 +68,12 @@ func TestInspectRoutes_NilRouter(t *testing.T) {
 	}
 }
 
-// TestDiscoverRoutes_FiltersInternal ensures DiscoverRoutes filters swagger and annot8 paths.
+// TestDiscoverRoutes_FiltersInternal ensures DiscoverRoutes filters swagger and openapi paths.
 func TestDiscoverRoutes_FiltersInternal(t *testing.T) {
 	r := chi.NewRouter()
 	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 	r.Get("/swagger/doc", stub)
-	r.Get("/annot8/data", stub)
+	r.Get("/openapi/data", stub)
 	r.Get("/public", stub)
 	routes, err := annot8.DiscoverRoutes(r)
 	if err != nil {

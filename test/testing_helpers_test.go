@@ -1,4 +1,4 @@
-package annot8_test
+package annot8fixtures_test
 
 import (
 	"encoding/json"
@@ -9,19 +9,28 @@ import (
 	"strings"
 	"testing"
 
-	annot8 "github.com/AxelTahmid/annot8"
+	"github.com/AxelTahmid/annot8"
 )
 
 // NewTestSchemaGenerator returns a fresh SchemaGenerator backed by a newly built TypeIndex.
 func NewTestSchemaGenerator() *annot8.SchemaGenerator {
 	idx := annot8.BuildTypeIndex()
+	idx.AddExternalKnownTypes(testExternalKnownTypes())
 	return annot8.NewSchemaGenerator(idx)
 }
 
 // NewTestGenerator returns a Generator configured with the shared TypeIndex.
 func NewTestGenerator() *annot8.Generator {
 	idx := annot8.BuildTypeIndex()
+	idx.AddExternalKnownTypes(testExternalKnownTypes())
 	return annot8.NewGeneratorWithCache(idx)
+}
+
+func testExternalKnownTypes() map[string]*annot8.Schema {
+	return map[string]*annot8.Schema{
+		"time.Time":  {Type: "string", Format: "date-time", Description: "RFC3339 date-time"},
+		"*time.Time": {Type: []any{"string", "null"}, Format: "date-time", Description: "Nullable RFC3339 date-time"},
+	}
 }
 
 // AssertEqual fails the test if expected != actual.

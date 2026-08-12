@@ -1,4 +1,4 @@
-package annot8_test
+package annot8fixtures_test
 
 import (
 	"strings"
@@ -11,7 +11,7 @@ import (
 func TestQualifiedNaming_Internal(t *testing.T) {
 	gen := NewTestSchemaGenerator()
 
-	// Use an existing type from the annot8 package
+	// Use an existing type from the openapi package
 	schema := gen.GenerateSchema("Schema")
 	if schema == nil || schema.Ref == "" {
 		t.Fatal("expected schema reference for Schema")

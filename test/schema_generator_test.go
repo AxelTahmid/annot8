@@ -1,9 +1,9 @@
-package annot8_test
+package annot8fixtures_test
 
 import (
 	"testing"
 
-	annot8 "github.com/AxelTahmid/annot8"
+	"github.com/AxelTahmid/annot8"
 )
 
 func TestSchemaGenerator_PrimitiveAndCollectionTypes(t *testing.T) {
@@ -76,7 +76,7 @@ func TestSchemaGenerator_ReferenceEmission(t *testing.T) {
 	}
 
 	stored := sg.GetSchemas()
-	if _, ok := stored["annot8.TestSimple"]; !ok {
+	if _, ok := stored["annot8fixtures.TestSimple"]; !ok {
 		t.Fatalf("expected stored schema for annot8.TestSimple, got %v", stored)
 	}
 }
@@ -194,13 +194,52 @@ func TestSchemaGenerator_StructShapes(t *testing.T) {
 			t.Fatalf("expected schema for TestWithQualified, got %v", stored)
 		}
 	})
+
+	t.Run("sqlc null enum wrapper is nullable and tolerant", func(t *testing.T) {
+		sg := NewTestSchemaGenerator()
+		_ = sg.GenerateSchema("sqlc.NullOrderDeliveryStatus")
+		schema := FindSchemaBySuffix(t, sg.GetSchemas(), "sqlc.NullOrderDeliveryStatus")
+
+		AssertDeepEqual(t, []string{"valid"}, schema.Required)
+
+		valueProp, ok := schema.Properties["order_delivery_status"]
+		if !ok {
+			t.Fatalf("expected order_delivery_status property, got %v", schema.Properties)
+		}
+		if len(valueProp.AnyOf) != 3 {
+			t.Fatalf("expected anyOf with 3 variants, got %+v", valueProp)
+		}
+
+		hasEnumRef := false
+		hasNull := false
+		hasEmptyString := false
+
+		for _, variant := range valueProp.AnyOf {
+			if variant == nil {
+				continue
+			}
+			if variant.Ref == "#/components/schemas/sqlc.OrderDeliveryStatus" {
+				hasEnumRef = true
+			}
+			if variant.Type == "null" {
+				hasNull = true
+			}
+			if variant.Type == "string" && len(variant.Enum) == 1 && variant.Enum[0] == "" {
+				hasEmptyString = true
+			}
+		}
+
+		if !hasEnumRef || !hasNull || !hasEmptyString {
+			t.Fatalf("expected enum ref, null, and empty string variants, got %+v", valueProp.AnyOf)
+		}
+	})
 }
 
 func TestSchemaGenerator_TagEnhancements(t *testing.T) {
 	t.Parallel()
 
 	sg := NewTestSchemaGenerator()
-	_ = sg.GenerateSchema("annot8.TagExample")
+	_ = sg.GenerateSchema("annot8fixtures.TagExample")
 	schema := FindSchemaBySuffix(t, sg.GetSchemas(), ".TagExample")
 
 	id := schema.Properties["id"]
@@ -224,4 +263,33 @@ func TestSchemaGenerator_TagEnhancements(t *testing.T) {
 
 	owner := schema.Properties["owner"]
 	AssertEqual(t, "uuid", owner.Format)
+
+	_ = sg.GenerateSchema("annot8fixtures.TagOneOfExample")
+	oneOfSchema := FindSchemaBySuffix(t, sg.GetSchemas(), ".TagOneOfExample")
+	sortField := oneOfSchema.Properties["sort"]
+	AssertDeepEqual(t, []any{"asc", "desc"}, sortField.Enum)
+}
+
+func TestSchemaGenerator_MarshalerFallbacks(t *testing.T) {
+	t.Parallel()
+
+	sg := NewTestSchemaGenerator()
+
+	t.Run("text marshaler maps to string with uuid format", func(t *testing.T) {
+		schema := sg.GenerateSchema("TestUUIDTextMarshaler")
+		AssertEqual(t, "string", schema.Type)
+		AssertEqual(t, "uuid", schema.Format)
+	})
+
+	t.Run("json marshaler infers email string format", func(t *testing.T) {
+		schema := sg.GenerateSchema("TestEmailJSONMarshaler")
+		AssertEqual(t, "string", schema.Type)
+		AssertEqual(t, "email", schema.Format)
+	})
+
+	t.Run("json marshaler infers date-time string format", func(t *testing.T) {
+		schema := sg.GenerateSchema("TestTimestampJSONMarshaler")
+		AssertEqual(t, "string", schema.Type)
+		AssertEqual(t, "date-time", schema.Format)
+	})
 }
