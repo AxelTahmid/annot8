@@ -20,7 +20,7 @@ type Annotation struct {
 	Produce     []string
 	Security    []string
 	Parameters  []ParamAnnotation
-	Success     *SuccessResponse
+	Successes   []SuccessResponse
 	Failures    []ErrorResponse
 }
 
@@ -95,19 +95,16 @@ func ParseAnnotations(filePath, functionName string) (*Annotation, error) {
 		}
 	}
 
-	// Update filePath and normalizedFilePath if we found a match via case-insensitive lookup
-	// (though LookupFile doesn't return the path, we can assume it found it if astFile != nil and it was from index)
-	normalizedFilePath = filepath.ToSlash(filePath)
-	if strings.Contains(normalizedFilePath, "\\") {
-		normalizedFilePath = strings.ReplaceAll(normalizedFilePath, "\\", "/")
-	}
-
 	// If a qualified function name was provided (e.g. "menu.handler_addons.List")
 	// and the resolved file doesn't look like the intended one, try to find
 	// a better match using the project's TypeIndex. This helps disambiguate
 	// identical simple function names (like "List") that exist across
 	// different packages/files (for example, menu and subscription both having
 	// handler_addons.go with a List method).
+	//
+	// normalizedFilePath below still describes the *incoming* path: it is only
+	// read by the guards that decide whether to re-resolve. Once a candidate is
+	// selected, astFile and filePath carry it forward.
 	if strings.Contains(functionName, ".") && typeIndex != nil {
 		slog.Debug(
 			"[annot8] ParseAnnotations: starting TypeIndex disambiguation",
@@ -123,16 +120,19 @@ func ParseAnnotations(filePath, functionName string) (*Annotation, error) {
 			packageDir := parts[len(parts)-3]
 			// If current astFile/filePath does not already look like the qualified one,
 			// search the TypeIndex for a matching file path and use its parsed AST.
+			// Both halves must match: a path that agrees on the file name but not
+			// the package directory is exactly the ambiguous case this guard exists
+			// for (menu/handler_addons.go vs subscription/handler_addons.go), so
+			// either mismatch has to trigger the re-resolution.
 			if astFile == nil ||
-				(!strings.Contains(normalizedFilePath, "/"+fileName+".go") && !strings.Contains(normalizedFilePath, "/"+packageDir+"/")) {
+				!strings.Contains(normalizedFilePath, "/"+fileName+".go") ||
+				!strings.Contains(normalizedFilePath, "/"+packageDir+"/") {
 				for p, f := range typeIndex.files {
 					normalizedCandidate := filepath.ToSlash(p)
 					if strings.HasSuffix(normalizedCandidate, "/"+fileName+".go") &&
 						strings.Contains(normalizedCandidate, "/"+packageDir+"/") {
 						astFile = f
 						filePath = p
-						normalizedFilePath = filepath.ToSlash(filePath)
-						normalizedFilePath = normalizedCandidate
 						slog.Debug(
 							"[annot8] ParseAnnotations: selected AST from TypeIndex",
 							"selected",
@@ -155,8 +155,6 @@ func ParseAnnotations(filePath, functionName string) (*Annotation, error) {
 					if strings.HasSuffix(normalizedCandidate, "/"+cand+".go") || strings.Contains(normalizedCandidate, "/"+cand+"/") {
 						astFile = f
 						filePath = p
-						normalizedFilePath = filepath.ToSlash(filePath)
-						normalizedFilePath = normalizedCandidate
 						slog.Debug("[annot8] ParseAnnotations: selected AST from TypeIndex", "selected", p, "candidate", cand)
 						break
 					}
@@ -226,6 +224,7 @@ func ParseAnnotations(filePath, functionName string) (*Annotation, error) {
 	annotation, err := parseAnnotationComment(comment)
 	if err != nil {
 		slog.Warn("[annot8] ParseAnnotations: parsing errors", "error", err)
+		return annotation, err
 	}
 
 	return annotation, nil
@@ -290,7 +289,7 @@ func parseAnnotationComment(comment string) (*Annotation, error) {
 			if err != nil {
 				errs = append(errs, err.Error())
 			} else {
-				annotation.Success = succ
+				annotation.Successes = append(annotation.Successes, *succ)
 			}
 
 		case strings.HasPrefix(line, "@Failure "):
@@ -300,6 +299,11 @@ func parseAnnotationComment(comment string) (*Annotation, error) {
 			} else {
 				annotation.Failures = append(annotation.Failures, *fail)
 			}
+		case strings.HasPrefix(line, "@"):
+			// Unknown directives were previously dropped silently, hiding
+			// typos like @Sucess or unsupported markers like @Route.
+			slog.Warn("[annot8] unrecognized annotation directive; ignoring",
+				"directive", strings.Fields(line)[0])
 		}
 	}
 

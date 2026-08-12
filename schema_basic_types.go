@@ -67,12 +67,23 @@ func isBasicType(typeName string) bool {
 	return false
 }
 
-// generateBasicTypeSchema returns a Schema for basic Go types (primitives, slices, pointers).
-// It handles arrays and pointers by delegating to GenerateSchema for element types.
+// generateBasicTypeSchema returns a Schema for basic Go types (primitives, slices, pointers, maps).
+// It handles arrays, pointers, and maps by delegating to GenerateSchema for element types.
 func (sg *SchemaGenerator) generateBasicTypeSchema(typeName string) *Schema {
 	if strings.HasPrefix(typeName, "[]") {
 		elem := strings.TrimPrefix(typeName, "[]")
 		return &Schema{Type: "array", Items: sg.GenerateSchema(elem)}
+	}
+	if strings.HasPrefix(typeName, "map[") {
+		// Parse map[KeyType]ValueType — keys are always strings in JSON objects.
+		// Find the closing bracket of the key type (keys cannot themselves be maps/slices).
+		rest := strings.TrimPrefix(typeName, "map[")
+		bracketIdx := strings.Index(rest, "]")
+		if bracketIdx != -1 {
+			valueType := rest[bracketIdx+1:]
+			return &Schema{Type: "object", AdditionalProperties: sg.GenerateSchema(valueType)}
+		}
+		return &Schema{Type: "object"}
 	}
 	if strings.HasPrefix(typeName, "*") {
 		// Try to see if the pointer type is known externally first (e.g. *time.Time)

@@ -1,23 +1,32 @@
 package annot8
 
+import (
+	"bytes"
+	"encoding/json"
+	"sort"
+	"strconv"
+	"strings"
+)
+
 // Config defines the configuration for OpenAPI specification generation.
 // All fields except Title and Version are optional.
 type Config struct {
-	Title          string   // Required: API title
-	Summary        string   // Optional: API summary
-	Description    string   // Optional: API description
-	Version        string   // Required: API version (e.g., "1.0.0")
-	TermsOfService string   // Optional: Terms of service URL
-	Servers        []string // Optional: List of base server URLs
-	Contact        *Contact // Optional: Contact information
-	License        *License // Optional: License information
+	Title             string                   // Required: API title
+	Summary           string                   // Optional: API summary
+	Description       string                   // Optional: API description
+	Version           string                   // Required: API version (e.g., "1.0.0")
+	TermsOfService    string                   // Optional: Terms of service URL
+	Servers           []string                 // Optional: List of base server URLs
+	Contact           *Contact                 // Optional: Contact information
+	License           *License                 // Optional: License information
+	SecurityInference *SecurityInferenceConfig // Optional: security inference override
 }
 
 // Contact represents contact information for the API.
 type Contact struct {
-	Name  string // Contact name
-	URL   string // Contact URL
-	Email string // Contact email address
+	Name  string `json:"name,omitempty"`  // Contact name
+	URL   string `json:"url,omitempty"`   // Contact URL
+	Email string `json:"email,omitempty"` // Contact email address
 }
 
 // License represents license information for the API.
@@ -84,11 +93,91 @@ type Operation struct {
 	OperationID  string                 `json:"operationId,omitempty"`
 	Parameters   []Parameter            `json:"parameters,omitempty"`
 	RequestBody  *RequestBody           `json:"requestBody,omitempty"`
-	Responses    map[string]Response    `json:"responses"`
+	Responses    Responses              `json:"responses"`
 	Callbacks    map[string]Callback    `json:"callbacks,omitempty"`
 	Deprecated   bool                   `json:"deprecated,omitempty"`
 	Security     []SecurityRequirement  `json:"security,omitempty"`
 	Servers      []Server               `json:"servers,omitempty"`
+
+	// Internal validation metadata (not serialized in OpenAPI output).
+	hasSummaryAnnotation  bool     `json:"-"`
+	hasTagsAnnotation     bool     `json:"-"`
+	hasSuccessAnnotation  bool     `json:"-"`
+	annotationParseErrors []string `json:"-"`
+	routePattern          string   `json:"-"`
+	httpMethod            string   `json:"-"`
+}
+
+// Responses represents operation responses keyed by HTTP status code (or "default").
+// It marshals in a canonical order for deterministic output.
+type Responses map[string]Response
+
+func (r Responses) MarshalJSON() ([]byte, error) {
+	if len(r) == 0 {
+		return []byte("{}"), nil
+	}
+
+	keys := make([]string, 0, len(r))
+	for key := range r {
+		keys = append(keys, key)
+	}
+
+	sort.Slice(keys, func(i, j int) bool {
+		g1, n1, t1 := responseCodeSortParts(keys[i])
+		g2, n2, t2 := responseCodeSortParts(keys[j])
+		if g1 != g2 {
+			return g1 < g2
+		}
+		if n1 != n2 {
+			return n1 < n2
+		}
+		if t1 != t2 {
+			return t1 < t2
+		}
+		return keys[i] < keys[j]
+	})
+
+	var out bytes.Buffer
+	out.WriteByte('{')
+
+	for idx, key := range keys {
+		if idx > 0 {
+			out.WriteByte(',')
+		}
+
+		encodedKey, err := json.Marshal(key)
+		if err != nil {
+			return nil, err
+		}
+		encodedValue, err := json.Marshal(r[key])
+		if err != nil {
+			return nil, err
+		}
+
+		out.Write(encodedKey)
+		out.WriteByte(':')
+		out.Write(encodedValue)
+	}
+
+	out.WriteByte('}')
+	return out.Bytes(), nil
+}
+
+func responseCodeSortParts(code string) (group int, numeric int, text string) {
+	normalized := strings.ToLower(strings.TrimSpace(code))
+	if normalized == "default" {
+		return 7, 0, "default"
+	}
+
+	n, err := strconv.Atoi(normalized)
+	if err == nil {
+		if n >= 100 && n <= 599 {
+			return n / 100, n, ""
+		}
+		return 6, n, ""
+	}
+
+	return 8, 0, normalized
 }
 
 // Parameter describes a path/query/header parameter.
@@ -249,6 +338,8 @@ type SecurityRequirement map[string][]string
 // SecurityScheme represents a security scheme configuration.
 type SecurityScheme struct {
 	Type         string `json:"type"`
+	Name         string `json:"name,omitempty"`
+	In           string `json:"in,omitempty"`
 	Scheme       string `json:"scheme,omitempty"`
 	BearerFormat string `json:"bearerFormat,omitempty"`
 	Description  string `json:"description,omitempty"`

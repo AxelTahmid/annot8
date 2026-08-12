@@ -225,12 +225,21 @@ func scanProjectForMethod(projectRoot, recvType, methodName string) string {
 	var foundPath string
 
 	_ = filepath.Walk(projectRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") {
+		// This is a best-effort last-resort lookup: an entry we cannot stat must
+		// not abort the walk, or one unreadable directory would hide every
+		// handler below it. Skip it, but say so.
+		if err != nil {
+			slog.Debug("[annot8] scanProjectForMethod: skipping unreadable path", "path", path, "error", err)
+			return nil
+		}
+		if info.IsDir() || !strings.HasSuffix(path, ".go") {
 			return nil
 		}
 
-		parsed, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
-		if err != nil {
+		// A file that does not parse cannot contain the method we are after.
+		parsed, parseErr := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if parseErr != nil {
+			slog.Debug("[annot8] scanProjectForMethod: skipping unparseable file", "path", path, "error", parseErr)
 			return nil
 		}
 

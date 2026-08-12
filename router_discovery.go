@@ -81,7 +81,7 @@ func InspectRoutes(r chi.Router) ([]RouteInfo, error) {
 
 // DiscoverRoutes returns only non-internal routes for OpenAPI spec assembly.
 // This function filters out routes that are part of the OpenAPI tooling itself
-// (such as /swagger and /annot8 endpoints) to avoid circular references in the specification.
+// (such as /swagger and /openapi endpoints) to avoid circular references in the specification.
 func DiscoverRoutes(r chi.Router) ([]RouteInfo, error) {
 	// Retrieve all routes via InspectRoutes
 	infos, err := InspectRoutes(r)
@@ -90,8 +90,12 @@ func DiscoverRoutes(r chi.Router) ([]RouteInfo, error) {
 	}
 	var filtered []RouteInfo
 	for _, ri := range infos {
-		// Skip documentation/internal routes (swagger, annot8, annot8)
-		if strings.Contains(ri.Pattern, "/swagger") || strings.Contains(ri.Pattern, "/annot8") || strings.Contains(ri.Pattern, "/annot8") {
+		// Skip OpenAPI internals
+		if strings.Contains(ri.Pattern, "/swagger") ||
+			strings.Contains(ri.Pattern, "/openapi") ||
+			strings.Contains(ri.Pattern, "/annot8") ||
+			strings.HasPrefix(ri.Pattern, "/docs") ||
+			ri.Pattern == "/metrics" {
 			continue
 		}
 		filtered = append(filtered, ri)

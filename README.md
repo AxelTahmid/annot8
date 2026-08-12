@@ -20,6 +20,9 @@ Annot8 is an annotation-driven OpenAPI 3.1 specification generator for Go HTTP s
 - **Type Safety**: Leverages Go's type system for accurate schema generation
 - **Deep Type Discovery**: Recursively finds and documents all referenced types
 - **External Type Support**: Configurable support for third-party library types
+- **Security Inference**: Configurable middleware and route rules for Bearer, cookie, and terminal-token schemes
+- **Query Object Expansion**: A query parameter annotated with a struct expands into documented field-level parameters
+- **Spec Validation**: Optional validation catches missing core annotations, duplicate operation IDs, ambiguous paths, and unresolved component references before writing a spec
 - **Runtime Generation**: Updates documentation dynamically without restarts
 
 ## Current Limitations
@@ -236,6 +239,7 @@ func main() {
         Config:   cfg,
         FilePath: "annot8.json",
         // RenameFunction: optionally customize model naming
+        Validate: true, // fail generation when the generated contract is inconsistent
     }
 
     if err := annot8.GenerateOpenAPISpecFile(params); err != nil {

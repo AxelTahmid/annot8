@@ -1,7 +1,8 @@
-// Package annot8 provides JSON-schema tag parsing utilities.
+// Package openapi provides JSON-schema tag parsing utilities.
 package annot8
 
 import (
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -9,34 +10,33 @@ import (
 // extractJSONTag returns the JSON key name from a struct tag string.
 // e.g. `json:"foo,omitempty" xml:"bar"` -> "foo".
 func extractJSONTag(tag string) string {
-	for _, part := range strings.Split(tag, " ") {
-		if strings.HasPrefix(part, "json:") {
-			value := strings.Trim(part[5:], `"`)
-			if comma := strings.Index(value, ","); comma != -1 {
-				return value[:comma]
-			}
-			return value
-		}
+	value, ok := reflect.StructTag(tag).Lookup("json")
+	if !ok {
+		return ""
 	}
-	return ""
+	if comma := strings.Index(value, ","); comma != -1 {
+		return value[:comma]
+	}
+	return value
 }
 
 // extractTag retrieves the value of a specific key from a struct tag string.
 // e.g. tag="validate:\"required\" json:\"foo\"", key="validate" -> "required".
 func extractTag(tag, key string) string {
-	for _, part := range strings.Split(tag, " ") {
-		if strings.HasPrefix(part, key+":") {
-			v := strings.TrimPrefix(part, key+":")
-			return strings.Trim(v, `"`)
-		}
+	if key == "" {
+		return ""
 	}
-	return ""
+	value, ok := reflect.StructTag(tag).Lookup(key)
+	if !ok {
+		return ""
+	}
+	return value
 }
 
 // applyEnhancedTags applies OpenAPI 3.1 metadata from struct tags to a schema.
 func (sg *SchemaGenerator) applyEnhancedTags(schema *Schema, tag string) {
-	// Parse annot8 tag for enhanced features
-	if openapiTag := extractTag(tag, "annot8"); openapiTag != "" {
+	// Parse openapi tag for enhanced features
+	if openapiTag := extractTag(tag, "openapi"); openapiTag != "" {
 		parts := strings.Split(openapiTag, ",")
 		for _, part := range parts {
 			part = strings.TrimSpace(part)

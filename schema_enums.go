@@ -1,4 +1,4 @@
-// Package annot8 provides enum detection and schema generation for string-based Go enums.
+// Package openapi provides enum detection and schema generation for string-based Go enums.
 package annot8
 
 import (

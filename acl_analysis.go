@@ -5,14 +5,7 @@ import (
 	"go/token"
 	"net/http"
 	"path/filepath"
-	"reflect"
-	"runtime"
 	"strings"
-)
-
-const (
-	middlewareImportPath = "middleware"
-	aclImportPath        = "acl"
 )
 
 // resolveACLPermissions determines ACL requirements for a handler.
@@ -86,9 +79,8 @@ func buildACLSlugMap(ti *TypeIndex) map[string]string {
 		return result
 	}
 
-	targetSuffix := "pkg/acl/slug.go"
 	for path, file := range ti.files {
-		if !strings.HasSuffix(path, targetSuffix) {
+		if !strings.HasSuffix(filepath.ToSlash(path), "/acl/slug.go") {
 			continue
 		}
 		for _, decl := range file.Decls {
@@ -365,17 +357,17 @@ func importAliases(file *ast.File) (middlewareAliases, aclAliases []string) {
 	}
 	for _, imp := range file.Imports {
 		path := strings.Trim(imp.Path.Value, `"`)
-		alias := ""
+		var alias string
 		if imp.Name != nil && imp.Name.Name != "" && imp.Name.Name != "_" && imp.Name.Name != "." {
 			alias = imp.Name.Name
 		} else {
 			alias = filepath.Base(path)
 		}
 
-		if path == middlewareImportPath {
+		if filepath.Base(path) == "middleware" {
 			middlewareAliases = append(middlewareAliases, alias)
 		}
-		if path == aclImportPath {
+		if filepath.Base(path) == "acl" {
 			aclAliases = append(aclAliases, alias)
 		}
 	}
@@ -420,9 +412,12 @@ func extractACLPermissions(middlewares []func(http.Handler) http.Handler) []stri
 	var permissions []string
 
 	for _, mw := range middlewares {
-		funcName := runtime.FuncForPC(reflect.ValueOf(mw).Pointer()).Name()
+		funcName := middlewareRuntimeName(mw)
+		if funcName == "" {
+			continue
+		}
 
-		if permission := extractPermissionFromMiddleware(mw, funcName); permission != "" {
+		if permission := extractPermissionFromMiddleware(funcName); permission != "" {
 			permissions = append(permissions, permission)
 		}
 	}
@@ -431,7 +426,7 @@ func extractACLPermissions(middlewares []func(http.Handler) http.Handler) []stri
 }
 
 // extractPermissionFromMiddleware provides human-readable descriptions from middleware names.
-func extractPermissionFromMiddleware(mw func(http.Handler) http.Handler, funcName string) string {
+func extractPermissionFromMiddleware(funcName string) string {
 	switch {
 	case strings.Contains(funcName, "Can"):
 		return "requires specific ACL permission"
@@ -460,7 +455,10 @@ func inferPermissionFromRoute(route, method string, middlewares []func(http.Hand
 	aclType := ""
 
 	for _, mw := range middlewares {
-		funcName := runtime.FuncForPC(reflect.ValueOf(mw).Pointer()).Name()
+		funcName := middlewareRuntimeName(mw)
+		if funcName == "" {
+			continue
+		}
 		switch {
 		case strings.Contains(funcName, "Can"):
 			hasACLMiddleware = true

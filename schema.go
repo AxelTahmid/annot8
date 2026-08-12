@@ -55,7 +55,10 @@ func (sg *SchemaGenerator) GenerateSchema(typeName string) *Schema {
 	qualifiedName := sg.getQualifiedTypeName(typeName)
 	slog.Debug("[annot8] GenerateSchema: type name conversion", "typeName", typeName, "qualifiedName", qualifiedName)
 
-	// 4) Check external known types
+	// 4) Check external known types. Callers decorate the returned schema in
+	// place (nullability wrapping, validation tags), so hand out clones —
+	// returning the shared canonical pointer once made a single *pgtype.Numeric
+	// field mark every Numeric occurrence in the spec nullable.
 	if sg.typeIndex != nil {
 		if schema, ok := sg.typeIndex.externalKnownTypes[qualifiedName]; ok {
 			slog.Debug("[annot8] GenerateSchema: using externalKnownTypes", "qualifiedName", qualifiedName)
@@ -63,10 +66,20 @@ func (sg *SchemaGenerator) GenerateSchema(typeName string) *Schema {
 			// but only if it's not a reference itself.
 			sg.mutex.Lock()
 			if _, exists := sg.schemas[qualifiedName]; !exists && schema.Ref == "" {
-				sg.schemas[qualifiedName] = schema
+				sg.schemas[qualifiedName] = cloneSchema(schema)
 			}
 			sg.mutex.Unlock()
-			return schema
+			return cloneSchema(schema)
+		}
+
+		if schema := sg.typeIndex.inferMarshalerSchema(qualifiedName); schema != nil {
+			slog.Debug("[annot8] GenerateSchema: using marshaler-derived schema", "qualifiedName", qualifiedName)
+			sg.mutex.Lock()
+			if _, exists := sg.schemas[qualifiedName]; !exists && schema.Ref == "" {
+				sg.schemas[qualifiedName] = cloneSchema(schema)
+			}
+			sg.mutex.Unlock()
+			return cloneSchema(schema)
 		}
 	}
 
@@ -98,33 +111,50 @@ func (sg *SchemaGenerator) GenerateSchema(typeName string) *Schema {
 	// 8) Generate the actual schema
 	var built *Schema
 	if sg.typeIndex != nil {
-		// Try qualified lookup first
-		if ts := sg.typeIndex.LookupQualifiedType(qualifiedName); ts != nil {
-			slog.Debug("[annot8] GenerateSchema: found type in TypeIndex", "qualifiedName", qualifiedName)
-
-			// Save old package context and set new one
+		// tryBuildFromAST performs the AST-based struct/type conversion for ts.
+		tryBuildFromAST := func(ts *ast.TypeSpec) *Schema {
 			oldPkg := sg.currentPackage
 			if idx := strings.LastIndex(qualifiedName, "."); idx != -1 {
 				sg.currentPackage = qualifiedName[:idx]
 			}
-
-			// Use convertFieldType to handle structs, maps, slices, etc.
-			// This ensures that type aliases like 'type WeeklyHours map[string]int' are correctly handled.
+			var s *Schema
 			if _, ok := ts.Type.(*ast.StructType); ok {
-				built = sg.convertStructToSchema(ts.Type.(*ast.StructType))
+				s = sg.convertStructToSchema(ts.Type.(*ast.StructType))
 			} else {
-				built = sg.convertFieldType(ts.Type)
+				s = sg.convertFieldType(ts.Type)
 			}
-
-			// Restore old package context
 			sg.currentPackage = oldPkg
+			return s
+		}
+
+		// Try qualified lookup first.
+		if ts := sg.typeIndex.LookupQualifiedType(qualifiedName); ts != nil {
+			slog.Debug("[annot8] GenerateSchema: found type in TypeIndex", "qualifiedName", qualifiedName)
+			built = tryBuildFromAST(ts)
+		}
+
+		// On a miss, attempt to load the external package on-demand and retry.
+		if built == nil {
+			if alias := externalPackageAlias(qualifiedName); alias != "" {
+				if sg.typeIndex.loadExternalPackage(alias) {
+					if ts := sg.typeIndex.LookupQualifiedType(qualifiedName); ts != nil {
+						slog.Debug(
+							"[annot8] GenerateSchema: found type after on-demand load",
+							"qualifiedName",
+							qualifiedName,
+						)
+						built = tryBuildFromAST(ts)
+					}
+				}
+			}
 		}
 	}
 
-	// 9) Fallback for unknown types
+	// 9) Fallback for unknown types. Warn loudly: an annotation naming a type
+	// that doesn't exist ships an empty object schema in the published spec.
 	if built == nil {
-		slog.Debug(
-			"[annot8] GenerateSchema: TypeIndex lookup failed, using basic mapping",
+		slog.Warn(
+			"[annot8] type not found anywhere; emitting empty object schema — check @Param/@Success annotations",
 			"qualifiedName",
 			qualifiedName,
 		)
@@ -142,11 +172,6 @@ func (sg *SchemaGenerator) GenerateSchema(typeName string) *Schema {
 	sg.mutex.Lock()
 	slog.Debug("[annot8] GenerateSchema: storing schema", "qualifiedName", qualifiedName, "originalTypeName", typeName)
 	sg.schemas[qualifiedName] = built
-	if sg.typeIndex != nil && sg.typeIndex.externalKnownTypes != nil {
-		sg.typeIndex.externalKnownTypes[qualifiedName] = &Schema{
-			Ref: fmt.Sprintf("#/components/schemas/%s", qualifiedName),
-		}
-	}
 	sg.mutex.Unlock()
 
 	// 11) Always return a reference
@@ -196,4 +221,15 @@ func (sg *SchemaGenerator) GetSchemas() map[string]Schema {
 		result[name] = *schema
 	}
 	return result
+}
+
+// externalPackageAlias extracts the package alias from a qualified type name such as
+// "pgtype.Vec2" or "*pgtype.Vec2", returning "pgtype". Returns "" for unqualified names.
+func externalPackageAlias(qualifiedName string) string {
+	// Strip leading pointer sigil(s)
+	name := strings.TrimLeft(qualifiedName, "*")
+	if dot := strings.LastIndex(name, "."); dot > 0 {
+		return name[:dot]
+	}
+	return ""
 }

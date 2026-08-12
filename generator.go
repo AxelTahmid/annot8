@@ -18,6 +18,7 @@ type Generator struct {
 	aclSlugOnce   sync.Once
 	aclSlugMap    map[string]string
 	modelNameFunc ModelNameFunc
+	securityCfg   SecurityInferenceConfig
 }
 
 // ModelNameFunc defines a strategy for converting Go package and type names into OpenAPI model names.
@@ -40,6 +41,7 @@ func NewGeneratorWithCache(typeIndex *TypeIndex) *Generator {
 		},
 		handlerCache:  make(map[uintptr]*HandlerInfo),
 		modelNameFunc: DefaultModelNameFunc,
+		securityCfg:   DefaultSecurityInferenceConfig(),
 	}
 }
 
@@ -52,6 +54,11 @@ func NewGenerator() *Generator {
 // SetModelNameFunc sets a custom strategy for naming OpenAPI models.
 func (g *Generator) SetModelNameFunc(f ModelNameFunc) {
 	g.modelNameFunc = f
+}
+
+// SetSecurityInferenceConfig overrides how operation security is inferred.
+func (g *Generator) SetSecurityInferenceConfig(cfg SecurityInferenceConfig) {
+	g.securityCfg = cfg
 }
 
 // GenerateSchema manually adds a type to the internal schema generator.
@@ -68,6 +75,11 @@ func (g *Generator) GenerateSpec(router chi.Router, cfg Config) Spec {
 
 	slog.Debug("[annot8] GenerateSpec: called", "title", cfg.Title, "version", cfg.Version)
 
+	securityCfg := g.securityCfg
+	if cfg.SecurityInference != nil {
+		securityCfg = *cfg.SecurityInference
+	}
+
 	spec := Spec{
 		OpenAPI:           "3.1.0",
 		JSONSchemaDialect: "https://spec.openapis.org/oas/3.1/dialect/base",
@@ -80,7 +92,10 @@ func (g *Generator) GenerateSpec(router chi.Router, cfg Config) Spec {
 			Contact:        cfg.Contact,
 			License:        cfg.License,
 		},
-		Paths: make(map[string]PathItem),
+		// Declare security at the root so public operations still pass lint rules
+		// that require explicit security metadata at either root or operation level.
+		Security: []SecurityRequirement{{}},
+		Paths:    make(map[string]PathItem),
 		Components: &Components{
 			Schemas:         make(map[string]Schema),
 			SecuritySchemes: make(map[string]SecurityScheme),
@@ -109,6 +124,18 @@ func (g *Generator) GenerateSpec(router chi.Router, cfg Config) Spec {
 		BearerFormat: "JWT",
 		Description:  "JWT token authentication",
 	}
+	spec.Components.SecuritySchemes["RefreshTokenCookieAuth"] = SecurityScheme{
+		Type:        "apiKey",
+		Name:        "refresh_token",
+		In:          "cookie",
+		Description: "Refresh token passed in HttpOnly cookie",
+	}
+	spec.Components.SecuritySchemes["TerminalTokenAuth"] = SecurityScheme{
+		Type:        "apiKey",
+		Name:        "X-Terminal-Token",
+		In:          "header",
+		Description: "Terminal token passed in X-Terminal-Token header",
+	}
 
 	g.addStandardSchemas(&spec)
 
@@ -124,7 +151,7 @@ func (g *Generator) GenerateSpec(router chi.Router, cfg Config) Spec {
 		handler := ri.HandlerFunc
 		pathKey := convertRouteToOpenAPIPath(route)
 
-		operation := g.buildOperation(handler, route, method, ri.Middlewares)
+		operation := g.buildOperation(handler, route, method, ri.Middlewares, securityCfg)
 
 		pathItem := spec.Paths[pathKey]
 		switch strings.ToUpper(method) {
@@ -159,6 +186,33 @@ func (g *Generator) GenerateSpec(router chi.Router, cfg Config) Spec {
 
 	slog.Debug("[annot8] GenerateSpec: completed", "path_count", len(spec.Paths))
 	return spec
+}
+
+// addStandardSchemas seeds portable schemas used by generated responses.
+// Applications may use their own problem types in @Failure annotations.
+func (g *Generator) addStandardSchemas(spec *Spec) {
+	spec.Components.Schemas["ProblemDetails"] = Schema{
+		Type: "object",
+		Properties: map[string]*Schema{
+			"type":     {Type: "string", Description: "A URI reference identifying the problem type"},
+			"title":    {Type: "string", Description: "A short, human-readable summary of the problem"},
+			"status":   {Type: "integer", Description: "The HTTP status code"},
+			"detail":   {Type: "string", Description: "Detailed explanation of the problem"},
+			"instance": {Type: "string", Description: "A URI reference identifying the specific instance of the problem"},
+		},
+		Required: []string{"type", "title", "status"},
+	}
+
+	spec.Components.Schemas["PaginationMeta"] = Schema{
+		Type: "object",
+		Properties: map[string]*Schema{
+			"has_next":              {Type: "boolean"},
+			"next_after_id":         {Type: "string", Description: "Opaque ID for pagination"},
+			"next_after_created_at": {Type: "string", Format: "date-time"},
+			"limit":                 {Type: "integer"},
+			"records":               {Type: "integer"},
+		},
+	}
 }
 
 // finalizeSchemas applies the naming strategy and resolves conflicts.

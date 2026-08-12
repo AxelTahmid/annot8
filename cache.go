@@ -1,11 +1,13 @@
 package annot8
 
 import (
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"sort"
@@ -30,9 +32,6 @@ func ensureTypeIndex() {
 		slog.Debug("[annot8] cache.go: initializing typeIndex and externalKnownTypes")
 		// Build type index once at startup
 		typeIndex = BuildTypeIndex()
-
-		slog.Debug("[annot8] cache.go: typeIndex built, setting externalKnownTypes")
-		typeIndex.externalKnownTypes = defaultExternalKnownTypes()
 		// Log the number of types and files indexed
 		slog.Debug(
 			"[annot8] cache.go: typeIndex initialized",
@@ -51,6 +50,15 @@ type TypeIndex struct {
 	externalKnownTypes map[string]*Schema                  // external known types
 	qualifiedTypes     map[string]*ast.TypeSpec            // qualified type name -> spec (e.g., "order.CreateReq")
 	packageImports     map[string]string                   // import path -> package name (e.g., "github.com/user/sqlc" -> "sqlc")
+	loadedExternalPkgs map[string]bool                     // package alias -> attempted (to avoid repeated go list calls)
+	typeJSONHints      map[string]typeJSONHint             // qualified type name -> marshaler interface hints
+}
+
+type typeJSONHint struct {
+	hasMarshalJSON   bool
+	hasUnmarshalJSON bool
+	hasMarshalText   bool
+	hasUnmarshalText bool
 }
 
 // BuildTypeIndex scans the given roots and builds a type index for all Go types.
@@ -61,6 +69,8 @@ func BuildTypeIndex() *TypeIndex {
 		externalKnownTypes: make(map[string]*Schema),
 		qualifiedTypes:     make(map[string]*ast.TypeSpec),
 		packageImports:     make(map[string]string),
+		loadedExternalPkgs: make(map[string]bool),
+		typeJSONHints:      make(map[string]typeJSONHint),
 	}
 
 	// Find project root by looking for go.mod
@@ -83,97 +93,8 @@ func BuildTypeIndex() *TypeIndex {
 		return idx.indexFile(path)
 	})
 
-	idx.externalKnownTypes = defaultExternalKnownTypes()
-
 	slog.Debug("[annot8] BuildTypeIndex: completed", "totalPackages", len(idx.types), "totalFiles", len(idx.files))
 	return idx
-}
-
-func defaultExternalKnownTypes() map[string]*Schema {
-	return map[string]*Schema{
-		// JSON and raw data types
-		"any":             {Description: "Any type (interface{})"},
-		"json.RawMessage": {Description: "Raw JSON data"},
-		"jsontext.Value":  {Description: "Raw JSON data"},
-		"byte":            {Type: "integer", Format: "int32", Description: "Byte value"},
-		"[]byte":          {Type: "string", Format: "byte", Description: "Binary data (base64-encoded)"},
-		"rune":            {Type: "integer", Format: "int32", Description: "Rune (Unicode code point) value"},
-		"[]rune":          {Type: "string", Description: "String data"},
-
-		// PostgreSQL types (jackc/pgtype)
-		"pgtype.Text":        {Type: "string", Description: "PostgreSQL text type"},
-		"pgtype.Bool":        {Type: "boolean", Description: "PostgreSQL boolean type"},
-		"pgtype.Int2":        {Type: "integer", Format: "int32", Description: "PostgreSQL smallint (int16)"},
-		"pgtype.Int4":        {Type: "integer", Format: "int32", Description: "PostgreSQL integer (int32)"},
-		"pgtype.Int8":        {Type: "integer", Format: "int64", Description: "PostgreSQL bigint (int64)"},
-		"pgtype.Float4":      {Type: "number", Format: "float", Description: "PostgreSQL real (float32)"},
-		"pgtype.Float8":      {Type: "number", Format: "double", Description: "PostgreSQL double precision (float64)"},
-		"pgtype.Numeric":     {Type: "number", Description: "PostgreSQL numeric/decimal type"},
-		"pgtype.Interval":    {Type: "string", Description: "PostgreSQL interval type"},
-		"pgtype.Timestamptz": {Type: "string", Format: "date-time", Description: "PostgreSQL timestamp with timezone"},
-		"pgtype.Timestamp": {
-			Type:        "string",
-			Format:      "date-time",
-			Description: "PostgreSQL timestamp without timezone",
-		},
-		"pgtype.Date":  {Type: "string", Format: "date", Description: "PostgreSQL date type"},
-		"pgtype.Point": {Type: "string", Description: "PostgreSQL point type (e.g., '(1.0,2.0)')"},
-		"pgtype.UUID":  {Type: "string", Format: "uuid", Description: "PostgreSQL UUID type"},
-		"pgtype.JSONB": {Description: "PostgreSQL JSONB type"},
-		"pgtype.JSON":  {Description: "PostgreSQL JSON type"},
-
-		// Time types
-		"time.Time": {Type: "string", Format: "date-time", Description: "RFC3339 date-time"},
-		"*time.Time": {
-			Type:        []any{"string", "null"},
-			Format:      "date-time",
-			Description: "Nullable RFC3339 date-time",
-		},
-		"time.Duration": {
-			Type:        "string",
-			Description: "Duration string (e.g., '1h30m'). Note: default Go JSON marshal is nanoseconds (integer).",
-		},
-		"time.Weekday": {Type: "integer", Description: "Go time.Weekday (0=Sunday, ...)"},
-
-		// UUID types
-		"uuid.UUID": {Type: "string", Format: "uuid", Description: "UUID string"},
-		"*uuid.UUID": {
-			Type:        []any{"string", "null"},
-			Format:      "uuid",
-			Description: "Nullable UUID string",
-		},
-
-		// Network types
-		"net.IP":    {Type: "string", Format: "ipv4", Description: "IPv4 address"},
-		"net.IPNet": {Type: "string", Description: "IP network (CIDR notation)"},
-		"url.URL":   {Type: "string", Format: "uri", Description: "URL string"},
-		"*url.URL": {
-			Type:        []any{"string", "null"},
-			Format:      "uri",
-			Description: "Nullable URL string",
-		},
-
-		// Database driver types (database/sql)
-		"sql.NullString":  {Type: []any{"string", "null"}, Description: "Nullable string"},
-		"sql.NullInt64":   {Type: []any{"integer", "null"}, Format: "int64", Description: "Nullable integer"},
-		"sql.NullInt32":   {Type: []any{"integer", "null"}, Format: "int32", Description: "Nullable integer"},
-		"sql.NullFloat64": {Type: []any{"number", "null"}, Description: "Nullable number"},
-		"sql.NullBool":    {Type: []any{"boolean", "null"}, Description: "Nullable boolean"},
-		"sql.NullTime":    {Type: []any{"string", "null"}, Format: "date-time", Description: "Nullable date-time"},
-		"sql.RawBytes":    {Type: "string", Format: "byte", Description: "Raw database bytes (base64)"},
-
-		// Common Go types
-		"big.Int": {Type: "string", Description: "Big integer as string"},
-		"*big.Int": {
-			Type:        []any{"string", "null"},
-			Description: "Nullable big integer as string",
-		},
-		"decimal.Decimal": {Type: "string", Description: "Decimal number as string"},
-		"*decimal.Decimal": {
-			Type:        []any{"string", "null"},
-			Description: "Nullable decimal number as string",
-		},
-	}
 }
 
 // indexFile processes a single Go file and indexes its types
@@ -228,9 +149,44 @@ func (idx *TypeIndex) indexFile(filePath string) error {
 				}
 			}
 		}
+
+		fd, ok := decl.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		idx.indexMethodHint(pkg, fd)
 	}
 
 	return nil
+}
+
+func (idx *TypeIndex) indexMethodHint(pkg string, fd *ast.FuncDecl) {
+	if fd == nil || fd.Recv == nil || fd.Name == nil || len(fd.Recv.List) != 1 {
+		return
+	}
+
+	receiverName := receiverTypeName(fd)
+	if receiverName == "" {
+		return
+	}
+
+	qualifiedName := idx.getQualifiedTypeName(pkg, receiverName)
+	hint := idx.typeJSONHints[qualifiedName]
+
+	switch fd.Name.Name {
+	case "MarshalJSON":
+		hint.hasMarshalJSON = true
+	case "UnmarshalJSON":
+		hint.hasUnmarshalJSON = true
+	case "MarshalText":
+		hint.hasMarshalText = true
+	case "UnmarshalText":
+		hint.hasUnmarshalText = true
+	default:
+		return
+	}
+
+	idx.typeJSONHints[qualifiedName] = hint
 }
 
 func GetTypeIndex() *TypeIndex {
@@ -351,11 +307,216 @@ func AddExternalKnownType(name string, schema *Schema) {
 	slog.Debug("[annot8] AddExternalKnownType: added external known type", "name", name)
 }
 
-// resetTypeIndexForTesting resets the type index for testing purposes
-// This should only be used in tests
-func resetTypeIndexForTesting() {
-	typeIndex = nil
-	typeIndexOnce = sync.Once{}
+// SetExternalKnownTypes replaces all configured external known type mappings.
+func SetExternalKnownTypes(schemas map[string]*Schema) {
+	ensureTypeIndex()
+	if typeIndex == nil {
+		slog.Error("[annot8] SetExternalKnownTypes: typeIndex is nil")
+		return
+	}
+	typeIndex.SetExternalKnownTypes(schemas)
+}
+
+// AddExternalKnownTypes merges mappings into configured external known types.
+func AddExternalKnownTypes(schemas map[string]*Schema) {
+	ensureTypeIndex()
+	if typeIndex == nil {
+		slog.Error("[annot8] AddExternalKnownTypes: typeIndex is nil")
+		return
+	}
+	typeIndex.AddExternalKnownTypes(schemas)
+}
+
+// SetExternalKnownTypes replaces all configured external known type mappings for this index.
+func (idx *TypeIndex) SetExternalKnownTypes(schemas map[string]*Schema) {
+	if idx == nil {
+		return
+	}
+	idx.externalKnownTypes = make(map[string]*Schema, len(schemas))
+	for name, schema := range schemas {
+		idx.externalKnownTypes[name] = schema
+	}
+}
+
+// AddExternalKnownTypes merges mappings into configured external known types for this index.
+func (idx *TypeIndex) AddExternalKnownTypes(schemas map[string]*Schema) {
+	if idx == nil || len(schemas) == 0 {
+		return
+	}
+	if idx.externalKnownTypes == nil {
+		idx.externalKnownTypes = make(map[string]*Schema, len(schemas))
+	}
+	for name, schema := range schemas {
+		idx.externalKnownTypes[name] = schema
+	}
+}
+
+func (idx *TypeIndex) inferMarshalerSchema(qualifiedName string) *Schema {
+	if idx == nil {
+		return nil
+	}
+
+	baseQualified := strings.TrimLeft(qualifiedName, "*")
+	alias := externalPackageAlias(baseQualified)
+	if alias != "" {
+		_ = idx.loadExternalPackage(alias)
+	}
+
+	hint, ok := idx.typeJSONHints[baseQualified]
+	if !ok {
+		return nil
+	}
+	if !hint.hasMarshalJSON && !hint.hasUnmarshalJSON && !hint.hasMarshalText && !hint.hasUnmarshalText {
+		return nil
+	}
+
+	if hint.hasMarshalText || hint.hasUnmarshalText {
+		s := &Schema{Type: "string", Description: marshalerDescription(baseQualified, "text")}
+		if format := inferStringFormat(baseQualified); format != "" {
+			s.Format = format
+		}
+		return s
+	}
+
+	if s := idx.inferPrimitiveAliasSchema(baseQualified); s != nil {
+		if hasType(s, "string") && s.Format == "" {
+			s.Format = inferStringFormat(baseQualified)
+		}
+		if s.Description == "" {
+			s.Description = marshalerDescription(baseQualified, "json")
+		}
+		return s
+	}
+
+	if format := inferStringFormat(baseQualified); format != "" {
+		return &Schema{
+			Type:        "string",
+			Format:      format,
+			Description: marshalerDescription(baseQualified, "json"),
+		}
+	}
+
+	return &Schema{
+		Type:        "object",
+		Description: marshalerDescription(baseQualified, "json"),
+	}
+}
+
+func marshalerDescription(qualifiedName, mode string) string {
+	switch mode {
+	case "text":
+		return "Serialized as a JSON string via " + qualifiedName + " text marshaling methods"
+	default:
+		return "Serialized via " + qualifiedName + " JSON marshaling methods"
+	}
+}
+
+func (idx *TypeIndex) inferPrimitiveAliasSchema(qualifiedName string) *Schema {
+	ts := idx.LookupQualifiedType(qualifiedName)
+	if ts == nil {
+		return nil
+	}
+
+	ident, ok := ts.Type.(*ast.Ident)
+	if !ok {
+		return nil
+	}
+
+	openapiType, openapiFormat := mapGoTypeToOpenAPI(ident.Name)
+	if openapiType == "object" {
+		return nil
+	}
+
+	s := &Schema{Type: openapiType}
+	if openapiFormat != "" {
+		s.Format = openapiFormat
+	}
+	return s
+}
+
+func inferStringFormat(qualifiedName string) string {
+	name := strings.TrimLeft(qualifiedName, "*")
+	if dot := strings.LastIndex(name, "."); dot != -1 {
+		name = name[dot+1:]
+	}
+
+	tokens := tokenizeTypeName(name)
+	has := func(token string) bool {
+		for _, t := range tokens {
+			if t == token {
+				return true
+			}
+		}
+		return false
+	}
+
+	switch {
+	case has("uuid"):
+		return "uuid"
+	case has("email"):
+		return "email"
+	case has("uri") || has("url"):
+		return "uri"
+	case has("ipv6"):
+		return "ipv6"
+	case has("ipv4"):
+		return "ipv4"
+	case has("duration"):
+		return "duration"
+	case has("timestamp") || has("datetime") || has("time"):
+		return "date-time"
+	case has("date"):
+		return "date"
+	default:
+		return ""
+	}
+}
+
+func tokenizeTypeName(s string) []string {
+	var tokens []string
+	var current []rune
+	flush := func() {
+		if len(current) == 0 {
+			return
+		}
+		tokens = append(tokens, strings.ToLower(string(current)))
+		current = current[:0]
+	}
+
+	runes := []rune(s)
+	var prev rune
+	for i, r := range runes {
+		if r == '_' || r == '-' || r == '.' || r == ' ' {
+			flush()
+			prev = r
+			continue
+		}
+		if i > 0 && isASCIIUpper(r) {
+			if isASCIILower(prev) || isASCIIDigit(prev) {
+				flush()
+			} else if i+1 < len(runes) && isASCIILower(runes[i+1]) {
+				// Split acronym-to-word boundary: UUIDText -> UUID + Text.
+				flush()
+			}
+		}
+		current = append(current, r)
+		prev = r
+	}
+	flush()
+
+	return tokens
+}
+
+func isASCIIUpper(r rune) bool {
+	return r >= 'A' && r <= 'Z'
+}
+
+func isASCIILower(r rune) bool {
+	return r >= 'a' && r <= 'z'
+}
+
+func isASCIIDigit(r rune) bool {
+	return r >= '0' && r <= '9'
 }
 
 // getQualifiedTypeName creates a qualified type name for indexing.
@@ -386,6 +547,71 @@ func (idx *TypeIndex) isExternalPackage(pkg string) bool {
 	return false
 }
 
+// loadExternalPackage finds the source directory for the external package identified by pkgAlias
+// (e.g. "pgtype"), parses its Go files, and indexes the discovered types.
+// Returns true if the package was successfully located and indexed.
+// Each alias is attempted at most once; subsequent calls are no-ops.
+func (idx *TypeIndex) loadExternalPackage(pkgAlias string) bool {
+	if idx.loadedExternalPkgs[pkgAlias] {
+		return false // already attempted
+	}
+	idx.loadedExternalPkgs[pkgAlias] = true
+
+	// Reverse-lookup: find the full import path for this alias.
+	importPath := ""
+	for ip, alias := range idx.packageImports {
+		if alias == pkgAlias {
+			importPath = ip
+			break
+		}
+	}
+	if importPath == "" {
+		slog.Debug("[annot8] loadExternalPackage: no import path found for alias", "alias", pkgAlias)
+		return false
+	}
+
+	// Ask the Go toolchain for the source directory of this package.
+	projectRoot := findProjectRoot()
+	cmd := exec.Command("go", "list", "-json", importPath)
+	if projectRoot != "" {
+		cmd.Dir = projectRoot
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		slog.Debug("[annot8] loadExternalPackage: go list failed", "importPath", importPath, "err", err)
+		return false
+	}
+
+	var info struct {
+		Dir string `json:"Dir"`
+	}
+	if err = json.Unmarshal(out, &info); err != nil || info.Dir == "" {
+		slog.Debug("[annot8] loadExternalPackage: could not parse go list output", "importPath", importPath)
+		return false
+	}
+
+	// Index every non-test .go file in the directory.
+	entries, err := os.ReadDir(info.Dir)
+	if err != nil {
+		slog.Debug("[annot8] loadExternalPackage: could not read dir", "dir", info.Dir, "err", err)
+		return false
+	}
+
+	indexed := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.IsDir() && strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") {
+			if indexErr := idx.indexFile(filepath.Join(info.Dir, name)); indexErr == nil {
+				indexed++
+			}
+		}
+	}
+
+	slog.Debug("[annot8] loadExternalPackage: indexed external package",
+		"alias", pkgAlias, "importPath", importPath, "dir", info.Dir, "files", indexed)
+	return indexed > 0
+}
+
 // findProjectRoot finds the project root by looking for go.mod file
 func findProjectRoot() string {
 	// Start from current working directory
@@ -397,7 +623,7 @@ func findProjectRoot() string {
 	// Walk up the directory tree looking for go.mod
 	for {
 		goModPath := filepath.Join(currentDir, "go.mod")
-		if _, err := os.Stat(goModPath); err == nil {
+		if _, err = os.Stat(goModPath); err == nil {
 			return currentDir
 		}
 
@@ -422,6 +648,8 @@ func loadModulePath() {
 	if root == "" {
 		return
 	}
+	// #nosec G304 -- build-time codegen tool; root is this module's own root as
+	// located by findProjectRoot, and the filename is the literal "go.mod".
 	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
 	if err != nil {
 		return
